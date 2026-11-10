@@ -47,7 +47,7 @@ Existing columns stay as they are. New columns:
 - Only bird names are sent to the AI: the unmatched eBird name and the shortlist of AviList names.
 - No dates, locations, counts, checklist IDs or personal details are sent.
 - Free-tier Gemini usage may be used by Google to improve its products, which is another reason to send names only.
-- The API key is stored in Apps Script **Script Properties**, never in `Code.gs`, so it is never committed to GitHub.
+- The API key is stored in Apps Script **Script Properties**, never in the code (`LifeList.gs` or `NameFixesAssistant.gs`), so it is never committed to GitHub.
 
 ## Known limitations
 

@@ -525,6 +525,7 @@ function onOpen() {
     .addItem('Process eBird data now (from eBird Data tab)', 'menuProcessEbird')
     .addItem('Check drop folder now', 'menuCheckFolder')
     .addItem('Check for AviList update now', 'menuCheckAviList')
+    .addItem('Suggest Name Fixes (AI)', 'menuSuggestFixes')
     .addSeparator()
     .addItem('Open interactive map', 'menuOpenMap')
     .addItem('Open eBird drop folder', 'menuOpenFolder')
@@ -630,6 +631,8 @@ function dailyJob() {
       const last = Number(props_().getProperty('AVILIST_LAST_CHECK') || 0);
       if (Date.now() - last > CFG.CHECK_EVERY_DAYS * 86400000) checkAviList_(false);
     } catch (e) { log_('Error', 'AviList check', e.message); }
+    // Finish any Name Fixes suggestions left over from an earlier run (quick if there are none)
+    try { suggestNameFixes_(); } catch (e) { log_('Error', 'Name Fixes assistant', e.message); }
   } finally { lock.releaseLock(); }
 }
 
@@ -1035,6 +1038,7 @@ function setupFixesTab_() {
     [[1, 240], [2, 220], [3, 300], [4, 70], [5, 95]].forEach(([c, w]) => sh.setColumnWidth(c, w));
     sh.getRange('C1').setNote('When an eBird name can\'t be matched automatically it appears here. Type the AviList scientific name (as in the Species tab) in column C, or IGNORE to skip it. It is used next time eBird data is processed.');
   }
+  ensureAssistColumns_(sh);   // Suggested species / Confidence / Reason / Accept (NameFixesAssistant.gs)
   sh.setTabColor('#f4b400');
 }
 
@@ -1160,6 +1164,7 @@ function applyEbird_(rows, sourceName) {
   const toAdd = [];
   res.unmatched.forEach(u => { if (!fixes.listed.has(u.sci)) toAdd.push([u.sci, u.common, '', u.n, new Date()]); });
   if (toAdd.length) fsh.getRange(fsh.getLastRow() + 1, 1, toAdd.length, 5).setValues(toAdd);
+  if (toAdd.length) { try { suggestNameFixes_(); } catch (e) { log_('Error', 'Name Fixes assistant', e.message); } }
   const unresolved = [...res.unmatched.keys()].length;
 
   const p = props_();
