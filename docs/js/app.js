@@ -17,13 +17,22 @@
   // Colours come from styles.css, so the charts and map match the page
   const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-  let checklist = null;
+  let checklist = null, matching = null;
   let charts = [], map = null, countryLayer = null, countryShapes = null;
+  let current = null;                  // { text, label, d }: the file shown, so fixes can recalculate it
 
-  // Name fixes the visitor has accepted, kept in their own browser (used fully in a later version)
+  // Name fixes the visitor has accepted: eBird scientific name (lower case) -> AviList name or 'IGNORE'.
+  // Kept in their own browser; wrapped in try because browser storage can be blocked.
+  const FIXES_KEY = 'lifelist.fixes';
   function loadFixes() {
-    try { return new Map(JSON.parse(localStorage.getItem('lifelist.fixes') || '[]')); } catch (e) { return new Map(); }
+    try { return new Map(JSON.parse(localStorage.getItem(FIXES_KEY) || '[]')); } catch (e) { return new Map(); }
   }
+  function saveFixes(fixes) {
+    try { localStorage.setItem(FIXES_KEY, JSON.stringify([...fixes])); } catch (e) { status('Your browser blocked saving fixes, so they will last until you reload.'); }
+    sessionFixes = fixes;
+  }
+  let sessionFixes = null;             // fallback if storage is blocked
+  const getFixes = () => { const f = loadFixes(); return f.size || !sessionFixes ? f : sessionFixes; };
 
   async function init() {
     status('Loading the AviList checklist…');
@@ -41,17 +50,18 @@
     }
   }
 
-  function show(text, label) {
+  function show(text, label, keepPlace) {
     try {
-      const d = buildDashboard_(parseCsvText_(text), checklist, loadFixes());
-      render(d, label);
+      const d = buildDashboard_(parseCsvText_(text), checklist, getFixes());
+      current = { text, label, d };
+      render(d, label, keepPlace);
       status('');
     } catch (e) {
       status(e.message);
     }
   }
 
-  function render(d, label) {
+  function render(d, label, keepPlace) {
     const t = d.totals;
     $('#source-label').textContent = label;
     $('#stats').innerHTML = [
@@ -73,19 +83,150 @@
         : esc(l.place)) + '</span></li>'
     ).join('') || '<li>No countable species found in this file.</li>';
 
-    $('#unmatched-plate').hidden = !d.unmatched.length;
-    $('#unmatched').innerHTML = d.unmatched.map(u =>
-      '<li><span class="sci">' + esc(u.sci) + '</span> ' + esc(u.common) +
-      ' <span class="n">· ' + num(u.n) + ' record' + (u.n === 1 ? '' : 's') + '</span></li>'
-    ).join('');
+    renderNameFixes(d);
 
     $('#dashboard').hidden = false;     // must be visible before the map and charts measure their size
     renderRegions(d);
     renderCharts(d);
     renderMap(d);
     redrawTrail();                             // the page is taller now: redraw the decorative route
-    $('#dashboard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!keepPlace) $('#dashboard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+
+  // ---------- Names to check: suggestions, Accept, Don't count it, Undo ----------
+  const commonName = sci => { const i = checklist.bySci.get(String(sci).toLowerCase()); return i === undefined ? '' : checklist.species[i].common; };
+
+  function renderNameFixes(d) {
+    const fixes = getFixes();
+    $('#unmatched-plate').hidden = !d.unmatched.length && !fixes.size;
+    $('#unmatched').innerHTML = d.unmatched.map((u, i) =>
+      '<li data-i="' + i + '">' +
+        '<div class="um-name"><span class="sci">' + esc(u.sci) + '</span> ' + esc(u.common) +
+          ' <span class="n">· ' + num(u.n) + ' record' + (u.n === 1 ? '' : 's') + '</span></div>' +
+        '<div class="um-actions">' +
+          '<button type="button" class="button small" data-act="suggest">Suggest a match</button>' +
+          '<button type="button" class="text-button" data-act="ignore">Don\'t count it</button>' +
+        '</div>' +
+        '<div class="um-result" aria-live="polite"></div>' +
+      '</li>'
+    ).join('') || (fixes.size ? '<li class="all-fixed">Every name now matches an AviList species.</li>' : '');
+
+    $('#fixes').hidden = !fixes.size;
+    $('#fixes-list').innerHTML = [...fixes].map(([from, to]) =>
+      '<li><span class="sci">' + esc(from) + '</span> → ' +
+        (to === 'IGNORE' ? 'not counted' : esc(commonName(to)) + ' <span class="sci">' + esc(to) + '</span>') +
+        ' <button type="button" class="text-button" data-act="undo" data-key="' + esc(from) + '">Undo</button></li>'
+    ).join('');
+  }
+
+  /** Sends a request to Lyrebird, the AI middleman. Throws if it can't be reached. */
+  async function askLyrebird(payload) {
+    if (!LYREBIRD_URL) throw new Error('the AI isn\'t set up on this site yet');
+    // text/plain keeps this a "simple" request, which Apps Script web apps accept from other websites
+    const res = await fetch(LYREBIRD_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error('the AI service replied with an error (HTTP ' + res.status + ')');
+    return res.json();
+  }
+
+  async function suggest(li, u) {
+    const btn = li.querySelector('[data-act="suggest"]'), out = li.querySelector('.um-result');
+    btn.disabled = true;
+    out.innerHTML = '<p class="working">Comparing with AviList…</p>';
+    await new Promise(r => setTimeout(r, 30));          // let the page update before the slow step
+    if (!matching) matching = speciesForMatching_(checklist);
+    const ebird = { sci: u.sci, common: u.common };
+    const prep = prepareSuggestion_(ebird, matching);   // string matching and shortlist, on this computer
+    let d = prep.final;
+    if (!d) {
+      out.innerHTML = '<p class="working">Checking with Lyrebird…</p>';
+      let ans;
+      try {
+        const reply = await askLyrebird({ action: 'nameFix', ebird, shortlist: prep.shortlist.map(c => ({ sci: c.sci, common: c.common })) });
+        ans = answerFromLyrebird_(reply, prep.shortlist);
+      } catch (e) {
+        ans = { status: 'error', reason: e.message };
+      }
+      d = suggestionFromAnswer_(prep.str, ans);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Suggest again';
+    out.innerHTML = (d.sci
+      ? '<div class="suggestion"><span class="conf conf-' + d.confidence.toLowerCase() + '">' + esc(d.confidence) + '</span> ' +
+          '<strong>' + esc(commonName(d.sci)) + '</strong> <span class="sci">' + esc(d.sci) + '</span>' +
+          '<p class="why">' + esc(d.reason) + '</p>' +
+          '<button type="button" class="button small primary" data-act="accept" data-sci="' + esc(d.sci) + '">Accept</button></div>'
+      : '<div class="suggestion"><strong>No confident match found.</strong><p class="why">' + esc(d.reason) + '</p></div>') +
+      othersHtml(prep.shortlist, d.sci);
+    redrawTrail();
+  }
+
+  /**
+   * "Other candidates": the whole shortlist (most similar names first, then the same
+   * genus), each with Use this, plus a search box for any AviList species. So the
+   * right species can always be reached, even when the AI is wrong or unavailable.
+   */
+  function othersHtml(shortlist, suggested) {
+    const rows = shortlist.map(c =>
+      '<li><span><strong>' + esc(c.common) + '</strong> <span class="sci">' + esc(c.sci) + '</span>' +
+        (c.sci === suggested ? ' <span class="tag">suggested</span>' : '') + '</span>' +
+        '<button type="button" class="text-button" data-act="accept" data-sci="' + esc(c.sci) + '">Use this</button></li>'
+    ).join('');
+    return '<details class="others"><summary>' + (suggested ? 'Not right? Other candidates' : 'Choose a species') + '</summary>' +
+      (rows ? '<ul class="cands">' + rows + '</ul>' : '') +
+      '<div class="search-row">' +
+        '<label>Or search AviList <input class="search" type="text" list="avilist-names" autocomplete="off" placeholder="Type a species name"></label>' +
+        '<button type="button" class="button small" data-act="use-search">Use this</button>' +
+      '</div>' +
+      '<p class="search-msg" aria-live="polite"></p>' +
+    '</details>';
+  }
+
+  // The search box's suggestions: every AviList species. Built the first time it's needed,
+  // so the page doesn't create 11,000 options for visitors who never open it.
+  function fillSpeciesNames() {
+    const list = $('#avilist-names');
+    if (list.options.length) return;
+    list.innerHTML = checklist.species.filter(s => !s.extinct)
+      .map(s => '<option value="' + esc(searchLabel_(s)) + '"></option>').join('');
+  }
+
+  function useSearch(li, u) {
+    const input = li.querySelector('.search'), msg = li.querySelector('.search-msg');
+    const s = findSpecies_(checklist, input.value);
+    if (!s) { msg.textContent = 'No AviList species by that name. Pick one from the suggestions as you type.'; return; }
+    applyFix(u.sci, s.sci);
+  }
+
+  function applyFix(ebirdSci, to) {
+    const fixes = getFixes();
+    if (to) fixes.set(ebirdSci.toLowerCase(), to); else fixes.delete(ebirdSci.toLowerCase());
+    saveFixes(fixes);
+    show(current.text, current.label, true);            // recalculate everything, staying in place
+  }
+
+  $('#unmatched-plate').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn || !current) return;
+    const li = btn.closest('li[data-i]');
+    const u = li ? current.d.unmatched[Number(li.dataset.i)] : null;
+    if (btn.dataset.act === 'suggest' && u) suggest(li, u);
+    if (btn.dataset.act === 'accept' && u) applyFix(u.sci, btn.dataset.sci);
+    if (btn.dataset.act === 'ignore' && u) applyFix(u.sci, 'IGNORE');
+    if (btn.dataset.act === 'use-search' && u) useSearch(li, u);
+    if (btn.dataset.act === 'undo') applyFix(btn.dataset.key, null);
+  });
+  // Enter in a search box does the same as its Use this button
+  $('#unmatched-plate').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || !e.target.matches('.search') || !current) return;
+    e.preventDefault();
+    const li = e.target.closest('li[data-i]');
+    useSearch(li, current.d.unmatched[Number(li.dataset.i)]);
+  });
+  // Opening "Other candidates" fills the search suggestions (once) and makes the page taller
+  $('#unmatched-plate').addEventListener('toggle', e => {
+    if (e.target.matches('details.others') && e.target.open) fillSpeciesNames();
+    redrawTrail();
+  }, true);
 
   // ---------- Plate II: region bars and the Oceans card ----------
   function renderRegions(d) {

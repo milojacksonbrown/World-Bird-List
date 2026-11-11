@@ -81,8 +81,17 @@
     <section id="unmatched-plate" class="plate" aria-labelledby="unmatched-title">
       <h2 id="unmatched-title">Names to check</h2>
       <p class="caption">These eBird names don't match an AviList species yet, often because the two checklists
-        disagree about what counts as a species. They aren't counted above.</p>
+        disagree about what counts as a species. They aren't counted above until you fix them.</p>
+      <p class="ai-note"><strong>Suggest a match</strong> first compares the name with AviList on your computer. If that isn't
+        conclusive, it asks Google's Gemini AI to choose from a shortlist, sending only the bird names involved
+        (Gemini's free tier may use them to improve Google's products). Nothing changes until you accept.</p>
       <ul id="unmatched" class="unmatched"></ul>
+      <datalist id="avilist-names"></datalist>
+      <div id="fixes" class="fixes" hidden>
+        <h3>Fixes you've accepted</h3>
+        <ul id="fixes-list"></ul>
+        <p class="ai-note">Saved in this browser only.</p>
+      </div>
     </section>
   </main>
 
@@ -98,6 +107,7 @@
   <script src="lib/LifeList.js"></script>
   <script src="lib/NameFixesAssistant.js"></script>
   <script src="js/dashboard-data.js"></script>
+  <script src="js/config.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

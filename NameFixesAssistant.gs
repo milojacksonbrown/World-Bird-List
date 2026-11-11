@@ -296,7 +296,47 @@ function parseAiAnswer_(text, shortlist) {
     return { status: 'invalid', reason: 'choice "' + (obj && obj.choice) + '" is not on the shortlist' };
   }
   const c = shortlist[choice - 1];
-  return { status: 'pick', pick: { row: c.row, sci: c.sci, reason }, reason };
+  return { status: 'pick', choice, pick: { row: c.row, sci: c.sci, reason }, reason };
+}
+
+/**
+ * The local part of a suggestion: string matching and the shortlist (no AI).
+ * Stops early with the final suggestion when the names are identical once tidied.
+ * Split from suggestFor_ so the website can do this part in the browser and the
+ * AI part on Lyrebird.
+ * @return {{str:Object|null, shortlist:Array, final:Object|null}}
+ */
+function prepareSuggestion_(ebird, species) {
+  const scored = scoreAll_(ebird, species);          // the slow step, done once
+  const str = stringMatch_(ebird, species, scored);
+  // The shortlist is always built (cheap once scored): the website shows it so
+  // people can pick another candidate themselves.
+  const shortlist = buildShortlist_(ebird, species, scored);
+  // An identical name (once tidied) is High confidence already: no need to
+  // spend time and free-tier quota asking the AI.
+  if (str && str.score === 1) {
+    const d = decideSuggestion_(str, null);
+    d.reason += ' (AI check not needed)';
+    return { str, shortlist, final: d };
+  }
+  return { str, shortlist, final: null };
+}
+
+/**
+ * The final part: combines the string match with the AI's checked answer.
+ * @param {Object|null} str  from prepareSuggestion_
+ * @param {{status:string, pick?:Object, reason:string}} ans  from parseAiAnswer_,
+ *        or {status:'error', reason} when the AI couldn't be asked
+ */
+function suggestionFromAnswer_(str, ans) {
+  let ai = null, note = '';
+  if (ans.status === 'pick') ai = ans.pick;
+  else if (ans.status === 'none') note = 'AI found no match on the shortlist: ' + ans.reason;
+  else if (ans.status === 'invalid') note = 'AI answer rejected (' + ans.reason + ')';
+  else note = 'AI check unavailable: ' + ans.reason;
+  const d = decideSuggestion_(str, ai);
+  if (note) d.reason += '. ' + note;
+  return d;
 }
 
 /**
@@ -310,34 +350,21 @@ function parseAiAnswer_(text, shortlist) {
 function suggestFor_(ebird, species, askAi) {
   const label = String(ebird.sci || ebird.common || '').trim();
   const t0 = Date.now();
-  const scored = scoreAll_(ebird, species);          // the slow step, done once
-  const str = stringMatch_(ebird, species, scored);
+  const prep = prepareSuggestion_(ebird, species);
   const scoreMs = Date.now() - t0;
-
-  // An identical name (once tidied) is High confidence already: no need to
-  // spend time and free-tier quota asking the AI.
-  if (str && str.score === 1) {
+  if (prep.final) {
     logTime_('Name Fixes: "' + label + '": scoring ' + scoreMs + ' ms, AI skipped (identical name)');
-    const d = decideSuggestion_(str, null);
-    d.reason += ' (AI check not needed)';
-    return d;
+    return prep.final;
   }
-
-  const shortlist = buildShortlist_(ebird, species, scored);
-  let ai = null, note = '';
   const t1 = Date.now();
+  let ans;
   try {
-    const ans = parseAiAnswer_(askAi(buildAiPrompt_(ebird, shortlist)), shortlist);
-    if (ans.status === 'pick') ai = ans.pick;
-    else if (ans.status === 'none') note = 'AI found no match on the shortlist: ' + ans.reason;
-    else note = 'AI answer rejected (' + ans.reason + ')';
+    ans = parseAiAnswer_(askAi(buildAiPrompt_(ebird, prep.shortlist)), prep.shortlist);
   } catch (e) {
-    note = 'AI check unavailable: ' + e.message;
+    ans = { status: 'error', reason: e.message };
   }
   logTime_('Name Fixes: "' + label + '": scoring ' + scoreMs + ' ms, AI ' + (Date.now() - t1) + ' ms');
-  const d = decideSuggestion_(str, ai);
-  if (note) d.reason += '. ' + note;
-  return d;
+  return suggestionFromAnswer_(prep.str, ans);
 }
 
 /** Writes a line to the Apps Script Executions log (does nothing in the tests). */

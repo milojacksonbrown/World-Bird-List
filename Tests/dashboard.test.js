@@ -8,7 +8,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const ctx = vm.createContext({});
-for (const file of ['LifeList.gs', 'docs/js/dashboard-data.js']) {
+for (const file of ['LifeList.gs', 'NameFixesAssistant.gs', 'docs/js/dashboard-data.js']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), ctx, { filename: file });
 }
 const run = expr => vm.runInContext(expr, ctx);
@@ -123,4 +123,58 @@ test('unmatched names are listed, and a name fix makes them count', () => {
   assert.equal(after.unmatched.length, 0);
   assert.equal(after.totals.species, 4);
   assert.equal(after.totals.countries, 3);           // Ireland now counts
+});
+
+// ---------- Name Fixes on the website ----------
+test('answerFromLyrebird_ re-checks a pick against the browser\'s own shortlist', () => {
+  const shortlist = [{ row: 2, sci: 'Corvus corone' }, { row: 3, sci: 'Corvus corax' }];
+  ctx.SL = shortlist;
+  const a = reply => run('answerFromLyrebird_')(reply, run('SL'));
+  const pick = a({ ok: true, status: 'pick', choice: 1, reason: 'part of Carrion Crow' });
+  assert.equal(pick.status, 'pick');
+  assert.equal(pick.pick.sci, 'Corvus corone');
+  assert.equal(pick.pick.row, 2);
+  assert.equal(a({ ok: true, status: 'pick', choice: 7, reason: 'x' }).status, 'invalid');   // off the shortlist
+  assert.equal(a({ ok: true, status: 'pick', choice: 0, reason: 'x' }).status, 'invalid');   // a broken "pick", not "no match"
+  assert.equal(a({ ok: true, status: 'none', reason: 'not here' }).status, 'none');
+  assert.equal(a({ ok: true, status: 'invalid', reason: 'x' }).status, 'invalid');
+  const err = a({ ok: false, error: 'limit', message: 'The AI limit for today has been reached.' });
+  assert.equal(err.status, 'error');
+  assert.match(err.reason, /limit/);
+});
+
+test('the full website flow: Hooded Crow gets Carrion Crow, at Low confidence when string matching disagrees', () => {
+  ctx.DATA = DATA;
+  const r = run(`(() => {
+    const checklist = loadChecklist_(DATA);
+    const prep = prepareSuggestion_({ sci: 'Corvus cornix', common: 'Hooded Crow' }, speciesForMatching_(checklist));
+    const n = prep.shortlist.findIndex(c => c.sci === 'Corvus corone') + 1;
+    const ans = answerFromLyrebird_({ ok: true, status: 'pick', choice: n, reason: 'Hooded Crow is part of Carrion Crow in AviList' }, prep.shortlist);
+    return { final: prep.final, str: prep.str && prep.str.sci, d: suggestionFromAnswer_(prep.str, ans) };
+  })()`);
+  assert.equal(r.final, null);                        // not identical, so the AI is asked
+  assert.equal(r.d.sci, 'Corvus corone');
+  if (r.str && r.str !== 'Corvus corone') assert.equal(r.d.confidence, 'Low');   // e.g. string matching picked the Raven
+});
+
+test('findSpecies_ finds what was typed in the search box, and never guesses', () => {
+  ctx.DATA = DATA;
+  const find = text => { ctx.T = text; const s = run('findSpecies_(loadChecklist_(DATA), T)'); return s ? s.sci : null; };
+  assert.equal(find('Carrion Crow (Corvus corone)'), 'Corvus corone');   // the suggestion format
+  assert.equal(find('corvus corone'), 'Corvus corone');                  // scientific name, any case
+  assert.equal(find('Gray Heron'), 'Ardea cinerea');                     // another name for it
+  assert.equal(find('  grey heron '), 'Ardea cinerea');                  // common name, tidied
+  assert.equal(find('Carrion'), null);                                  // partial: no guessing
+  assert.equal(find(''), null);
+  ctx.S = { sci: 'Corvus corone', common: 'Carrion Crow' };
+  assert.equal(run('searchLabel_(S)'), 'Carrion Crow (Corvus corone)');
+});
+
+test('prepareSuggestion_ always returns a shortlist, even for an identical name', () => {
+  ctx.DATA = DATA;
+  const r = run(`(() => { const p = prepareSuggestion_({ sci: 'Ardea cinerea', common: 'Grey Heron' }, speciesForMatching_(loadChecklist_(DATA)));
+    return { conf: p.final && p.final.confidence, n: p.shortlist.length, first: p.shortlist[0].sci }; })()`);
+  assert.equal(r.conf, 'High');
+  assert.ok(r.n > 1);
+  assert.equal(r.first, 'Ardea cinerea');
 });

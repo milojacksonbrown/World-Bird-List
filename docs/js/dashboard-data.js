@@ -113,6 +113,55 @@ function activityByDate_(rows, index) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+//  Name Fixes on the website (uses NameFixesAssistant.js, loaded before this)
+// ---------------------------------------------------------------------------
+
+/** AviList species in the shape the string-matching functions expect. */
+function speciesForMatching_(checklist) {
+  return checklist.species.map(s => ({ row: s.i, sci: s.sci, common: s.common, alt: s.alt }));
+}
+
+/**
+ * Turns Lyrebird's reply into the answer suggestionFromAnswer_ expects.
+ * A "pick" is checked again here against the browser's own shortlist, so a
+ * faulty or tampered Lyrebird still can't suggest something not on it.
+ * @param {Object} reply  Lyrebird's JSON reply
+ * @param {Array} shortlist  from prepareSuggestion_
+ */
+function answerFromLyrebird_(reply, shortlist) {
+  if (!reply || !reply.ok) return { status: 'error', reason: (reply && reply.message) || 'no answer from the AI' };
+  if (reply.status === 'none') return { status: 'none', reason: String(reply.reason || 'no reason given').slice(0, 200) };
+  if (reply.status !== 'pick') return { status: 'invalid', reason: 'the AI\'s answer was not on the shortlist' };
+  // A "pick" must name a candidate (1 or more); anything else is a broken reply, not "no match"
+  if (!(Number(reply.choice) >= 1)) return { status: 'invalid', reason: 'Lyrebird\'s reply did not say which candidate' };
+  return parseAiAnswer_(JSON.stringify({ choice: reply.choice, reason: reply.reason }), shortlist);
+}
+
+/** How a species appears in the search box's suggestions, e.g. "Carrion Crow (Corvus corone)". */
+function searchLabel_(s) {
+  return (s.common ? s.common + ' (' + s.sci + ')' : s.sci);
+}
+
+/**
+ * Finds the AviList species someone typed in the search box: the
+ * "Common Name (Scientific name)" form from the suggestions, a scientific
+ * name, or a common or other name. Returns null rather than guessing.
+ * @return {Object|null}  a species from loadChecklist_
+ */
+function findSpecies_(checklist, text) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  const inBrackets = t.match(/\(([^()]+)\)\s*$/);
+  const tries = inBrackets ? [inBrackets[1], t.replace(/\s*\([^()]*\)\s*$/, '')] : [t];
+  for (const x of tries) {
+    let i = checklist.bySci.get(x.trim().toLowerCase());
+    if (i === undefined) i = checklist.byCommon.get(normCommon_(x));
+    if (i !== undefined) return checklist.species[i];
+  }
+  return null;
+}
+
 /** Does this species count towards this region? */
 function inRegion_(s, region) {
   return s.regions.includes(region) || (s.regions.includes('Worldwide') && LAND_REGIONS_.includes(region));

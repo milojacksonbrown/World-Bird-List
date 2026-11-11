@@ -55,9 +55,9 @@ Field-guide style, like a modern bird book rather than an app:
 
 ## AI design
 
-### The middleman
+### Lyrebird, the AI middleman
 
-The Gemini key can't go in a public web page: anyone could copy it from the page source. A small, **separate** Apps Script project (not my spreadsheet's script) acts as a middleman:
+The Gemini key can't go in a public web page: anyone could copy it from the page source. A small, **separate** Apps Script project (not my spreadsheet's script) acts as a middleman. It's called **Lyrebird**, after the bird famous for passing on sounds it has heard: it passes the website's questions to Gemini and the answers back.
 
 - It holds the key in its Script Properties, like the spreadsheet does.
 - It accepts two kinds of request: `nameFix` and `query`. Anything else is rejected.
@@ -67,15 +67,16 @@ The Gemini key can't go in a public web page: anyone could copy it from the page
 
 ### 1. Name Fixes assistant
 
-The same method as `DESIGN.md`, split between the browser and the middleman:
+The same method as `DESIGN.md`, split between the browser and Lyrebird:
 
 | Step | Where |
 |---|---|
 | String matching and shortlist | Browser (existing code) |
-| Ask Gemini to pick from the shortlist | Middleman |
-| Check the answer is on the shortlist | Middleman **and** browser |
+| Ask Gemini to pick from the shortlist | Lyrebird |
+| Check the answer is on the shortlist | Lyrebird **and** browser |
 | Confidence (High / Medium / Low) | Browser (existing `decideSuggestion_`) |
 | Accept | Browser; the fix is remembered in that browser |
+| Other candidates | Browser: the whole shortlist with *Use this*, plus a search box for any AviList species, so the right species can always be reached even if the AI is wrong or unavailable (also covers renamed species that aren't on the shortlist) |
 
 Sent to the AI: the unmatched eBird name and the shortlist names only.
 
@@ -104,7 +105,7 @@ The AI doesn't answer the question. It translates it into a small, structured qu
 | `docs/data/avilist-v2026.json` | The converted checklist |
 | `tools/build-avilist.js` | Converts the AviList download into that file (run on my computer with Node) |
 | `tools/build-site.js` | Copies `LifeList.gs` and `NameFixesAssistant.gs` into the site as `.js` files, so both use the same code |
-| `Middleman/Middleman.gs` | The middleman, pasted into its own Apps Script project and deployed as a web app (*Execute as: Me*, *Anyone*) |
+| `Lyrebird/Lyrebird.gs` | Lyrebird, in its own Apps Script project together with a copy of `NameFixesAssistant.gs` (the shared prompt, Gemini call and answer checks), deployed as a web app (*Execute as: Me*, *Anyone*). `docs/js/config.js` holds its web address |
 | `Query.gs` *(or similar)* | The query checker and runner: pure functions, tested like the rest |
 
 - **Charts:** Chart.js from a public CDN, at a fixed version.
@@ -114,7 +115,7 @@ The AI doesn't answer the question. It translates it into a small, structured qu
 ## Data and privacy
 
 - **The eBird file never leaves the visitor's computer.** Everything is worked out in the browser. Nothing is uploaded or stored on a server.
-- To the AI (via the middleman): unmatched bird names and shortlists, and question text. Nothing else.
+- To the AI (via Lyrebird): unmatched bird names and shortlists, and question text. Nothing else.
 - Free-tier Gemini data may be used by Google to improve its products. The page says so next to both AI features. The AI only runs when someone clicks, never automatically.
 - The sample data is my own list, including places. I'm happy for that to be public.
 - Accepted name fixes are kept in the visitor's own browser (local storage), not sent anywhere.
@@ -134,7 +135,7 @@ AviList is © AviList Core Team, licensed under CC BY 4.0. The site footer and R
 
 ## How it will be tested
 
-- Unit tests (`node --test`) for: the AviList conversion, the query checker (valid queries pass, invalid tables, fields, filters and types are rejected), the query runner on a small made-up list, and the middleman's request checks.
+- Unit tests (`node --test`) for: the AviList conversion, the query checker (valid queries pass, invalid tables, fields, filters and types are rejected), the query runner on a small made-up list, and Lyrebird's request checks.
 - The page previewed locally with my real eBird file and with sample data, at laptop and phone widths.
 - AI: the 20-name Name Fixes accuracy test from `DESIGN.md`, and about 15 example questions, recording whether each was understood correctly.
 
@@ -142,7 +143,7 @@ AviList is © AviList Core Team, licensed under CC BY 4.0. The site footer and R
 
 1. AviList data file, the site loading it, reading the eBird file, headline numbers. **Session 1.**
 2. Charts (lifers, species and checklists per year and month), countries-birded map and region bars, unmatched names list. **Session 2 (done 11 Nov, with the changes above).**
-3. Middleman plus Name Fixes in the browser. **Session 3.**
+3. Lyrebird plus Name Fixes in the browser. **Session 3 (built 11 Nov; tested with fake Google services, then deployed).**
 4. Ask a question. **Session 4.**
 5. Publish on GitHub Pages, README case study ("how I built this", including using Claude Code). **Session 5, or alongside 4.**
 
