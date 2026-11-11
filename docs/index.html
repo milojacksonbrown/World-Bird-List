@@ -8,9 +8,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Decoration: a dashed "expedition route" drawn behind the page by app.js -->
+  <svg id="trail" class="trail" aria-hidden="true" focusable="false"></svg>
+
   <header class="masthead">
     <p class="kicker">A field guide to your birds</p>
     <h1>Life List</h1>
@@ -25,6 +29,7 @@
       <button id="sample" class="button" type="button">Try with sample data</button>
     </div>
     <p id="status" class="status" role="status" aria-live="polite"></p>
+    <p id="source-label" class="source-label"></p>
     <details class="howto">
       <summary>Where do I get my eBird data?</summary>
       <ol>
@@ -36,23 +41,44 @@
   </header>
 
   <main id="dashboard" hidden>
-    <p id="source-label" class="source-label"></p>
 
     <section class="plate" aria-labelledby="count-title">
-      <p class="plate-no">Plate I</p>
       <h2 id="count-title">The count</h2>
       <div id="stats" class="stats"></div>
     </section>
 
+    <section class="plate" aria-labelledby="world-title">
+      <h2 id="world-title">Where in the world</h2>
+      <p class="caption">The countries you've birded in, shaded by how many species you've recorded there. The bars show how much of each region's breeding birds you've seen. Tap or hover over a country for details.</p>
+      <div class="world">
+        <div class="map-wrap">
+          <div id="map" class="map" role="img" aria-label="World map of the countries birded in, shaded by the number of species recorded in each. Region figures are listed beside it."></div>
+          <div id="map-legend" class="map-legend"></div>
+          <p class="map-note">For the region figures, each country belongs to one region; countries spanning two (Russia, Egypt, Indonesia) go by continent.</p>
+        </div>
+        <ul id="region-bars" class="region-bars"></ul>
+      </div>
+    </section>
+
+    <section class="plate" aria-labelledby="years-title">
+      <h2 id="years-title">Through the years</h2>
+      <p class="caption">New species by year, and by month of the year to show the seasons (every year counted together).
+        Below: every species recorded, lifer or not, with the number of checklists as a guide to how much birding was done.</p>
+      <div class="charts">
+        <figure class="chart"><figcaption>Lifers per year</figcaption><div class="chart-box"><canvas id="chart-years" role="img" aria-label="Bar chart of lifers per year"></canvas></div></figure>
+        <figure class="chart"><figcaption>Lifers per month</figcaption><div class="chart-box"><canvas id="chart-months" role="img" aria-label="Bar chart of lifers per month of the year"></canvas></div></figure>
+        <figure class="chart"><figcaption>Species recorded per year</figcaption><div class="chart-box"><canvas id="chart-sp-years" role="img" aria-label="Bar chart of species recorded per year, with a line for checklists per year"></canvas></div></figure>
+        <figure class="chart"><figcaption>Species recorded per month</figcaption><div class="chart-box"><canvas id="chart-sp-months" role="img" aria-label="Bar chart of species recorded per month of the year, with a line for checklists per month"></canvas></div></figure>
+      </div>
+    </section>
+
     <section class="plate" aria-labelledby="lifers-title">
-      <p class="plate-no">Plate II</p>
       <h2 id="lifers-title">Latest lifers</h2>
       <p class="caption">The first time each species was recorded, newest first.</p>
       <ol id="lifers" class="lifers"></ol>
     </section>
 
     <section id="unmatched-plate" class="plate" aria-labelledby="unmatched-title">
-      <p class="plate-no">Plate III</p>
       <h2 id="unmatched-title">Names to check</h2>
       <p class="caption">These eBird names don't match an AviList species yet, often because the two checklists
         disagree about what counts as a species. They aren't counted above.</p>
@@ -65,6 +91,9 @@
     <p>Your eBird file is read in your browser and is never uploaded. Not affiliated with eBird or AviList.</p>
   </footer>
 
+  <!-- Libraries, at fixed versions: charts and the map -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <!-- Shared code: the same functions the Google Sheets version uses (copied by tools/build-site.js) -->
   <script src="lib/LifeList.js"></script>
   <script src="lib/NameFixesAssistant.js"></script>

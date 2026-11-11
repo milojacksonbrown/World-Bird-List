@@ -78,6 +78,44 @@ test('region progress: Worldwide species count in land regions only, extinct spe
   assert.deepEqual([r('Oceans').seen, r('Oceans').total], [0, 0]);   // Worldwide doesn't count at sea
 });
 
+test('lifers per month of the year count every year together (January = position 0)', () => {
+  const d = build();
+  const m = Array.from(d.perMonth);
+  assert.equal(m.length, 12);
+  assert.equal(m[2], 1);                              // March 2022: heron
+  assert.equal(m[6], 2);                              // July 2024: osprey, turtle dove
+  assert.equal(m.reduce((a, b) => a + b, 0), 3);
+});
+
+test('species recorded and checklists per year and month count every record, not just lifers', () => {
+  const d = build();
+  // 2022: heron (S2). 2023: heron again (S1), not a lifer but still a species recorded that year.
+  // 2024: osprey + turtle dove (S3, S4); Hooded Crow (S5) and gull sp. (S6) are checklists but not species.
+  assert.deepEqual({ ...d.speciesPerYear }, { 2022: 1, 2023: 1, 2024: 2 });
+  assert.deepEqual({ ...d.checklistsPerYear }, { 2022: 1, 2023: 1, 2024: 4 });
+  const sm = Array.from(d.speciesPerMonth), cm = Array.from(d.checklistsPerMonth);
+  assert.equal(sm[0], 0);                             // January: only unmatched / "sp." records
+  assert.equal(cm[0], 2);                             // …but two checklists
+  assert.equal(sm[4], 1);                             // May 2023: heron
+  assert.equal(sm[6], 2);                             // July: osprey, turtle dove
+});
+
+test('regionForCountry_ follows the range summariser for borderline countries', () => {
+  const r = (code, continent, subregion) => run('regionForCountry_')({ ISO_A2_EH: code, ISO_A2: code, CONTINENT: continent, SUBREGION: subregion });
+  assert.equal(r('GB', 'Europe', 'Northern Europe'), 'Europe');
+  assert.equal(r('US', 'North America', 'Northern America'), 'N America');
+  assert.equal(r('MX', 'North America', 'Central America'), 'Middle America');
+  assert.equal(r('CU', 'North America', 'Caribbean'), 'Middle America');
+  assert.equal(r('AU', 'Oceania', 'Australia and New Zealand'), 'Australasia');
+  assert.equal(r('PG', 'Oceania', 'Melanesia'), 'Australasia');
+  assert.equal(r('FJ', 'Oceania', 'Melanesia'), 'Pacific Is.');
+  assert.equal(r('TF', 'Seven seas (open ocean)', 'Seven seas (open ocean)'), 'Antarctic');
+  assert.equal(r('BR', 'South America', 'South America'), 'S America');
+  // Natural Earth gives a few countries "-99"; ISO_A2_EH is the fixed code
+  assert.equal(run('countryCode_')({ ISO_A2: '-99', ISO_A2_EH: 'FR' }), 'FR');
+  assert.equal(run('countryCode_')({ ISO_A2: '-99', ISO_A2_EH: '-99' }), '');
+});
+
 test('unmatched names are listed, and a name fix makes them count', () => {
   const before = build();
   assert.deepEqual(Array.from(before.unmatched, u => u.sci), ['Corvus cornix']);

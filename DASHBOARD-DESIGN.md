@@ -26,8 +26,9 @@ A web page that anyone can open, where they upload their own eBird data and see 
 | Section | Contents |
 |---|---|
 | Headline numbers | Species seen, % of the world's living species, families, orders, countries |
-| Lifers over time | Chart of lifers per year, plus the latest 20 lifers (date, species, place, eBird checklist link) |
-| Progress by region | A world map with each AviList region shaded by % of its breeding species seen (tap a region for numbers), plus the same figures as a compact bar list beside it. "Oceans" (seabirds) gets its own card, since it can't be shaded on land |
+| Through the years | Four charts in two rows. Top: lifers per year, and lifers per month of the year (all years together) to show seasonality. Bottom: every species recorded per year (the year list) and per month, lifer or not, each with a dashed line for the number of checklists, because species counts also depend on how much birding was done |
+| Latest lifers | The latest 20 lifers (date, species, place, eBird checklist link) |
+| Where in the world | A map of the countries birded in, each shaded by the number of species recorded there (square-root scale, so countries with a handful of species still stand out); unbirded countries stay plain. Beside it, bars for each AviList region: species seen out of species breeding there. "Oceans" (seabirds) gets its own card. *Later:* shade countries by % of that country's species, which needs per-country species lists (not in AviList) |
 | Ask a question | Question box, the query it was understood as, and the results table |
 | Name fixes | Unmatched eBird names, each with suggestion, confidence, reason and Accept |
 | Footer | AviList version and credit, licence, how the data is handled |
@@ -42,7 +43,10 @@ Field-guide style, like a modern bird book rather than an app:
 - Serif headings (book-like), with a clean sans-serif for numbers and tables so they stay easy to read.
 - Sections laid out like plates in a guide: a heading, a short caption, then the chart or list.
 - Scientific names in italics, as in field guides.
-- Works on a phone as well as a laptop. A dark mode in the same style ("field guide by lamplight") follows the device setting.
+- Works on a phone as well as a laptop.
+- Light mode only, whatever the device setting: darker always means more.
+- Section headings only (no "Plate I, II…" labels).
+- A dashed red "expedition route" flows behind the page (no loops), showing in the gaps between sections and the margins. It starts at a multi-directional signpost by the title and ends at a red X ("X marks the spot") below the footer. Solid line-drawn icons sit along it: a mountain, forest and lake around the title, where the effect is seen most, and a forest and lake at bends further down. Drawn by code from the section positions and redrawn whenever the page changes size; decoration only (hidden from screen readers).
 
 ## Where the data comes from
 
@@ -104,7 +108,7 @@ The AI doesn't answer the question. It translates it into a small, structured qu
 | `Query.gs` *(or similar)* | The query checker and runner: pure functions, tested like the rest |
 
 - **Charts:** Chart.js from a public CDN, at a fixed version.
-- **Map:** Leaflet with Natural Earth country outlines (public domain), as the spreadsheet's map already uses. Each country is assigned to one AviList region with a small lookup table based on Natural Earth's continent and sub-region fields. Countries spanning two regions (e.g. Russia, Egypt) are given to one, which is noted under the map.
+- **Map:** Leaflet with Natural Earth country outlines (public domain, pinned to release v5.1.2), as the spreadsheet's map already uses, with no tile background. Each country is also assigned to one AviList region (for the tooltips), following the range summariser's rules; countries spanning two regions (e.g. Russia, Egypt) go by continent.
 - **Hosting:** GitHub Pages, from the `docs/` folder. The repo must be public.
 
 ## Data and privacy
@@ -137,7 +141,7 @@ AviList is © AviList Core Team, licensed under CC BY 4.0. The site footer and R
 ## Build order (to have a working version by 18 Nov)
 
 1. AviList data file, the site loading it, reading the eBird file, headline numbers. **Session 1.**
-2. Lifers chart, latest lifers, region progress map and bars, unmatched names list. **Session 2 (about 1.5 sessions).**
+2. Charts (lifers, species and checklists per year and month), countries-birded map and region bars, unmatched names list. **Session 2 (done 11 Nov, with the changes above).**
 3. Middleman plus Name Fixes in the browser. **Session 3.**
 4. Ask a question. **Session 4.**
 5. Publish on GitHub Pages, README case study ("how I built this", including using Claude Code). **Session 5, or alongside 4.**

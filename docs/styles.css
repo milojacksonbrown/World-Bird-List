@@ -1,7 +1,8 @@
 /* Field-guide style: warm paper, dark ink, natural greens; serif headings,
-   clean sans-serif for numbers and lists. Dark mode: "by lamplight". */
+   clean sans-serif for numbers and lists. Light mode only. */
 
 :root {
+  color-scheme: light;
   --paper: #f4eee1;
   --paper-deep: #ebe2cf;
   --card: #fbf8f1;
@@ -12,33 +13,32 @@
   --green-soft: #2d6a4f;
   --rust: #9a4a26;
   --focus: #2d6a4f;
+  --sea: #dde3dc;
+  --map-none: #efe8d8;
+  --trail: #b23a28;                   /* red route lines */
+  --map-1: #d3e4c8; --map-2: #a9cf9f; --map-3: #74b083; --map-4: #3f8460; --map-5: #1b4332;
   --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
   --sans: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #1c1a16;
-    --paper-deep: #242019;
-    --card: #26221b;
-    --ink: #ece4d2;
-    --ink-soft: #b5aa94;
-    --rule: #4a4235;
-    --green: #8fc9a6;
-    --green-soft: #a9d8bb;
-    --rust: #e09a72;
-    --focus: #a9d8bb;
-  }
-}
-:root[data-theme="dark"] {
-  --paper: #1c1a16; --paper-deep: #242019; --card: #26221b; --ink: #ece4d2; --ink-soft: #b5aa94;
-  --rule: #4a4235; --green: #8fc9a6; --green-soft: #a9d8bb; --rust: #e09a72; --focus: #a9d8bb;
-}
 
 * { box-sizing: border-box; }
 
+/* ---------- decorative route (drawn by app.js) ---------- */
+.trail { position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none; }
+.trail .route {
+  fill: none; stroke: var(--trail); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 11 9; opacity: 0.7;            /* long dashes, like a route on an old map */
+}
+.trail .icon { opacity: 1; }
+/* Halo: the icon's shapes, fattened, in the paper colour, so the route doesn't show through */
+.trail .halo * { fill: var(--paper); stroke: var(--paper); stroke-width: 3.6; }
+.masthead, main, .colophon { position: relative; z-index: 1; }   /* page content sits above the route */
+
 body {
   margin: 0;
+  position: relative;
+  overflow-x: hidden;                 /* the route never causes sideways scrolling */
   background: var(--paper);
   background-image: radial-gradient(ellipse at top, var(--paper) 40%, var(--paper-deep) 100%);
   background-attachment: fixed;
@@ -92,16 +92,13 @@ h1 {
   border: 1px solid var(--rule);
   box-shadow: 0 0 0 4px var(--card), 0 0 0 5px var(--rule);   /* double rule, like a printed plate */
 }
-.plate-no {
-  margin: 0; font: 600 0.75rem var(--sans); letter-spacing: 0.18em; text-transform: uppercase; color: var(--rust);
-}
 .plate h2 { margin: 2px 0 4px; font-family: var(--serif); font-weight: 600; font-size: 1.7rem; color: var(--green); }
 .caption { margin: 0 0 16px; color: var(--ink-soft); font-style: italic; font-family: var(--serif); }
 
 /* ---------- headline numbers ---------- */
 .stats {
   display: grid; gap: 1px; margin-top: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));      /* six numbers: two tidy rows of three */
   background: var(--rule); border: 1px solid var(--rule);
 }
 .stat { background: var(--card); padding: 16px 14px; }
@@ -111,6 +108,43 @@ h1 {
 }
 .stat .label { display: block; font-family: var(--serif); font-size: 1.05rem; margin-top: 2px; }
 .stat .of { display: block; color: var(--ink-soft); font-size: 0.9rem; }
+
+/* ---------- map and region bars ---------- */
+.world { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.map {
+  height: 380px; border: 1px solid var(--rule);
+  background: var(--sea);
+}
+.leaflet-container { font-family: var(--sans); }
+.leaflet-tooltip {
+  background: var(--card); color: var(--ink); border: 1px solid var(--rule);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); font-size: 0.9rem; max-width: 260px; white-space: normal;
+}
+.leaflet-bar a { background: var(--card); color: var(--ink); border-color: var(--rule); }
+.leaflet-bar a.leaflet-disabled { background: var(--paper-deep); color: var(--ink-soft); }
+.leaflet-control-attribution { background: transparent !important; color: var(--ink-soft); font-size: 0.7rem; }
+.leaflet-control-attribution a { color: var(--ink-soft); }
+.map-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 0.85rem; color: var(--ink-soft); }
+.map-legend .key { display: inline-flex; align-items: center; gap: 6px; }
+.map-legend .swatch { width: 14px; height: 14px; border: 1px solid var(--rule); display: inline-block; }
+.map-note { margin: 6px 0 0; font-size: 0.8rem; color: var(--ink-soft); font-style: italic; }
+
+.region-bars { list-style: none; margin: 0; padding: 0; }
+.region-bars li { padding: 6px 0; }
+.region-bars .row { display: flex; justify-content: space-between; gap: 8px; }
+.region-bars .name { font-family: var(--serif); }
+.region-bars .figs { color: var(--ink-soft); font-size: 0.9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.region-bars .track { height: 8px; margin-top: 4px; background: var(--paper-deep); border: 1px solid var(--rule); }
+.region-bars .fill { height: 100%; background: var(--green-soft); min-width: 1px; }
+.region-bars li.sea { margin-top: 10px; padding: 10px 12px; border: 1px dashed var(--rule); }
+.region-bars li.sea .note { display: block; font-size: 0.82rem; color: var(--ink-soft); font-style: italic; margin-top: 4px; }
+
+/* ---------- charts ---------- */
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 24px; }   /* lifers on top, all species below */
+@media (max-width: 640px) { .charts { grid-template-columns: 1fr; } }
+.chart { margin: 0; }
+.chart figcaption { font-family: var(--serif); font-size: 1.05rem; margin-bottom: 6px; }
+.chart-box { position: relative; height: 240px; }
 
 /* ---------- lifers ---------- */
 .lifers { list-style: none; margin: 0; padding: 0; }
@@ -141,4 +175,9 @@ h1 {
   .lifers li { grid-template-columns: 1fr; }
   .lifers .where { grid-column: 1; }
   .stat .n { font-size: 1.8rem; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .world { grid-template-columns: 1fr; }
+  .map { height: 280px; }
 }
