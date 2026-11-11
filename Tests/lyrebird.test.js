@@ -35,7 +35,7 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
     } },
   };
   const ctx = vm.createContext(fakes);
-  for (const file of ['NameFixesAssistant.gs', 'Lyrebird/Lyrebird.gs']) {
+  for (const file of ['NameFixesAssistant.gs', 'AskYourList.gs', 'Lyrebird/Lyrebird.gs']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), ctx, { filename: file });
   }
   const run = expr => vm.runInContext(expr, ctx);
@@ -47,7 +47,7 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
 test('opening the web address shows it is running, without revealing the key', () => {
   const { run } = setup();
   const text = run('doGet')().text;
-  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-11 (session 3)', usedToday: 0, dailyCap: 200 });
+  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-11 (session 4b)', actions: ['nameFix', 'query'], usedToday: 0, dailyCap: 200 });
   assert.ok(!text.includes(KEY));
 });
 
@@ -141,4 +141,40 @@ test('the candidate number is right even with an older NameFixesAssistant.gs (no
   const r = post(request());
   assert.equal(r.status, 'pick');
   assert.equal(r.choice, 2);
+});
+
+// ---------- the "query" action (Ask your list) ----------
+
+const question = q => JSON.stringify({ action: 'query', question: q });
+
+test('query: sends only the question, with the query reply shape, and returns a checked query', () => {
+  const { post, calls } = setup({ geminiReply: [200, { status: 'query', reason: 'Families by % seen', table: 'families',
+    filters: [{ field: 'pctSeen', op: 'lt', value: '10' }], sortField: 'pctSeen', sortDir: 'asc' }] });
+  const r = post(question('Which families have I seen less than 10% of?'));
+  assert.equal(r.ok, true);
+  assert.equal(r.status, 'query');
+  assert.deepEqual(r.query, { table: 'families', region: '', filters: [{ field: 'pctSeen', op: 'lt', value: 10 }], sortField: 'pctSeen', sortDir: 'asc', limit: 25 });
+  const sent = JSON.parse(calls[0].opts.payload);
+  assert.match(sent.contents[0].parts[0].text, /Question: "Which families have I seen less than 10% of\?"/);
+  assert.ok(sent.generationConfig.responseSchema.properties.table, 'asks for the query shape, not the name-fix shape');
+});
+
+test('query: a query outside the allowed tables is not passed on', () => {
+  const { post } = setup({ geminiReply: [200, { status: 'query', reason: '', table: 'species', filters: [{ field: 'email', op: 'eq', value: 'x' }] }] });
+  const r = post(question('Show me everything'));
+  assert.equal(r.status, 'invalid');
+  assert.equal(r.query, undefined);
+});
+
+test('query: "cannot" is passed on with the reason', () => {
+  const { post } = setup({ geminiReply: [200, { status: 'cannot', reason: 'Counties are not in the tables.' }] });
+  assert.deepEqual(post(question('What did I see in Norfolk?')), { ok: true, status: 'cannot', reason: 'Counties are not in the tables.' });
+});
+
+test('query: missing or over-long questions are refused before Gemini is asked', () => {
+  const { post, calls } = setup();
+  assert.equal(post(question('   ')).error, 'bad-request');
+  assert.equal(post(question('x'.repeat(301))).error, 'bad-request');
+  assert.equal(post(JSON.stringify({ action: 'query', question: { text: 'hi' } })).error, 'bad-request');
+  assert.equal(calls.length, 0);
 });

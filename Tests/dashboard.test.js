@@ -178,3 +178,18 @@ test('prepareSuggestion_ always returns a shortlist, even for an identical name'
   assert.ok(r.n > 1);
   assert.equal(r.first, 'Ardea cinerea');
 });
+
+test('filterLifers_ searches common name, scientific name and family, ignoring case and accents', () => {
+  ctx.L = [
+    { common: "Rüppell's Vulture", sci: 'Gyps rueppelli', family: 'Hawks, Eagles, and Kites' },
+    { common: 'Common Ringed Plover', sci: 'Charadrius hiaticula', family: 'Plovers and Lapwings' },
+    { common: 'Grey Heron', sci: 'Ardea cinerea', family: 'Herons' },
+  ];
+  const f = q => { ctx.Q = q; return Array.from(run('filterLifers_(L, Q)'), l => l.common); };
+  assert.deepEqual(f('plover'), ['Common Ringed Plover']);
+  assert.deepEqual(f('CHARADRIUS'), ['Common Ringed Plover']);
+  assert.deepEqual(f('ruppells'), ["Rüppell's Vulture"]);          // accent and apostrophe ignored
+  assert.deepEqual(f('herons'), ['Grey Heron']);                    // by family
+  assert.equal(f('').length, 3);                                    // empty search: everything
+  assert.equal(f('albatross').length, 0);
+});

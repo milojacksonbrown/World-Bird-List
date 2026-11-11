@@ -27,7 +27,7 @@ A web page that anyone can open, where they upload their own eBird data and see 
 |---|---|
 | Headline numbers | Species seen, % of the world's living species, families, orders, countries |
 | Through the years | Four charts in two rows. Top: lifers per year, and lifers per month of the year (all years together) to show seasonality. Bottom: every species recorded per year (the year list) and per month, lifer or not, each with a dashed line for the number of checklists, because species counts also depend on how much birding was done |
-| Latest lifers | The latest 20 lifers (date, species, place, eBird checklist link) |
+| Latest lifers | The latest 10 lifers (date, species, place, eBird checklist link), with *Show all* to expand the full list and a search box that finds any lifer by common name, scientific name or family (ignoring capitals and accents) |
 | Where in the world | A map of the countries birded in, each shaded by the number of species recorded there (square-root scale, so countries with a handful of species still stand out); unbirded countries stay plain. Beside it, bars for each AviList region: species seen out of species breeding there. "Oceans" (seabirds) gets its own card. *Later:* shade countries by % of that country's species, which needs per-country species lists (not in AviList) |
 | Ask a question | Question box, the query it was understood as, and the results table |
 | Name fixes | Unmatched eBird names, each with suggestion, confidence, reason and Accept |
@@ -84,9 +84,17 @@ Sent to the AI: the unmatched eBird name and the shortlist names only.
 
 The AI doesn't answer the question. It translates it into a small, structured query, and the browser runs that query on the visitor's own data.
 
-1. The browser sends the question plus a description of what can be searched: the tables (species, families, orders, regions, lifers), their fields, and the allowed filters, sorts and limits.
-2. Gemini replies with a query in a fixed JSON shape, or "can't answer that".
-3. The browser checks the query: every table, field and filter must be on the allowed list, and values must be the right type. Anything else is rejected with a message.
+1. The browser sends the question to Lyrebird, which adds a description of what can be searched: the tables (species, families, orders, countries, years, months), their fields, and the allowed comparisons, sorts and limits.
+2. Gemini replies with a query in a fixed JSON shape (its `responseSchema`), or "cannot" with a reason.
+3. The query is checked, in Lyrebird and again in the browser: every table, field and comparison must be on the allowed list, and values must be the right type. Anything else is rejected with a message.
+
+*As built (session 4):* the allowed tables live in one place, `ASK_TABLES_` in `AskYourList.gs`, and the prompt, the checker and the plain-English description are all generated from it, so they can't disagree. Families and orders are worked out from the species rows when the query runs, so a region limit ("in Africa") changes their totals correctly. The query shape:
+
+```json
+{ "table": "families", "region": "Africa",
+  "filters": [{ "field": "pctSeen", "op": "lt", "value": "10" }],
+  "sortField": "pctSeen", "sortDir": "asc", "limit": 25 }
+```
 4. The browser runs the query and shows the results, plus a plain-English line saying how it was understood (for example "Families in Africa, % seen under 10%, lowest first"), so the person can spot a misreading.
 
 **Sent to the AI:** the question text only. No sightings, names from the list, dates or places. The data never leaves the browser.
@@ -97,6 +105,8 @@ The AI doesn't answer the question. It translates it into a small, structured qu
 - Which threatened species have I seen?
 - What were my first 10 lifers in Asia?
 
+**What it can't answer (yet):** anything below country level (counties, parks, trips), counts of individual birds, and questions needing two steps ("species I've seen in only one country"). These get "can't answer that" rather than a guess.
+
 ## How it will be built
 
 | Part | What it is |
@@ -104,9 +114,10 @@ The AI doesn't answer the question. It translates it into a small, structured qu
 | `docs/` | The website (GitHub Pages serves this folder): `index.html`, `app.js`, `styles.css` |
 | `docs/data/avilist-v2026.json` | The converted checklist |
 | `tools/build-avilist.js` | Converts the AviList download into that file (run on my computer with Node) |
-| `tools/build-site.js` | Copies `LifeList.gs` and `NameFixesAssistant.gs` into the site as `.js` files, so both use the same code |
-| `Lyrebird/Lyrebird.gs` | Lyrebird, in its own Apps Script project together with a copy of `NameFixesAssistant.gs` (the shared prompt, Gemini call and answer checks), deployed as a web app (*Execute as: Me*, *Anyone*). `docs/js/config.js` holds its web address |
-| `Query.gs` *(or similar)* | The query checker and runner: pure functions, tested like the rest |
+| `tools/build-site.js` | Copies `LifeList.gs`, `NameFixesAssistant.gs` and `AskYourList.gs` into the site as `.js` files, so both use the same code |
+| `Lyrebird/Lyrebird.gs` | Lyrebird, in its own Apps Script project together with copies of `NameFixesAssistant.gs` (the name-fix prompt, Gemini call and answer checks) and `AskYourList.gs`, deployed as a web app (*Execute as: Me*, *Anyone*). `docs/js/config.js` holds its web address |
+| `AskYourList.gs` | The question tool: the allowed tables, the prompt, the query checker, the runner and the plain-English description. Pure functions, tested like the rest |
+| `docs/data/countries.json` | Country codes → name, other names ("UK") and AviList region, made from Natural Earth by `tools/build-countries.js`, so questions can name countries |
 
 - **Charts:** Chart.js from a public CDN, at a fixed version.
 - **Map:** Leaflet with Natural Earth country outlines (public domain, pinned to release v5.1.2), as the spreadsheet's map already uses, with no tile background. Each country is also assigned to one AviList region (for the tooltips), following the range summariser's rules; countries spanning two regions (e.g. Russia, Egypt) go by continent.
@@ -144,7 +155,7 @@ AviList is © AviList Core Team, licensed under CC BY 4.0. The site footer and R
 1. AviList data file, the site loading it, reading the eBird file, headline numbers. **Session 1.**
 2. Charts (lifers, species and checklists per year and month), countries-birded map and region bars, unmatched names list. **Session 2 (done 11 Nov, with the changes above).**
 3. Lyrebird plus Name Fixes in the browser. **Session 3 (built 11 Nov; tested with fake Google services, then deployed).**
-4. Ask a question. **Session 4.**
+4. Ask a question. **Session 4 (built 11 Nov; tested with a stand-in Lyrebird in the browser, then live after redeploying).**
 5. Publish on GitHub Pages, README case study ("how I built this", including using Claude Code). **Session 5, or alongside 4.**
 
 If time runs short, step 4 is the one to trim (fewer kinds of question), not the publishing.

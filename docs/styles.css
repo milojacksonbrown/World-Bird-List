@@ -164,6 +164,17 @@ h1 {
 .unmatched li:last-child { border-bottom: 0; }
 .unmatched .n { color: var(--ink-soft); font-size: 0.92rem; }
 
+/* ---------- lifers: search and show all ---------- */
+.lifer-tools { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 16px; margin-bottom: 8px; }
+.lifer-search { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; color: var(--ink-soft); flex: 1 1 260px; max-width: 420px; }
+.lifer-search input {
+  font: 1rem var(--sans); padding: 7px 10px; border: 1px solid var(--rule); border-radius: 4px;
+  background: #fff; color: var(--ink); width: 100%;
+}
+.lifer-count { margin: 0; font-size: 0.88rem; color: var(--ink-soft); font-style: italic; }
+.lifers li.none { display: block; color: var(--ink-soft); font-style: italic; }
+#lifers-toggle { margin-top: 12px; }
+
 /* ---------- names to check: suggestions ---------- */
 .ai-note { margin: 0 0 14px; font-size: 0.88rem; color: var(--ink-soft); }
 .unmatched li { padding: 12px 0; }
@@ -205,6 +216,33 @@ h1 {
 .fixes li { padding: 4px 0; }
 .fixes .sci { font-family: var(--serif); font-style: italic; color: var(--ink-soft); }
 
+/* ---------- ask your list ---------- */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ask-form { display: flex; gap: 10px; }
+.ask-form input {
+  flex: 1 1 auto; min-width: 0; font: 1rem var(--sans); padding: 9px 12px; border: 1px solid var(--rule); border-radius: 4px;
+  background: #fff; color: var(--ink);
+}
+.ask-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 10px 0 12px; font-size: 0.88rem; color: var(--ink-soft); }
+.chip {
+  font: 0.86rem var(--sans); color: var(--ink); background: var(--paper); cursor: pointer;
+  border: 1px solid var(--rule); border-radius: 14px; padding: 4px 11px; text-align: left;
+}
+.chip:hover { background: var(--card); border-color: var(--green-soft); }
+.ask-result .working { margin: 6px 0 0; color: var(--ink-soft); font-style: italic; }
+.understood { margin: 4px 0 12px; padding: 10px 14px; background: var(--paper); border-left: 3px solid var(--green-soft); }
+.understood .label { display: block; font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+.understood .total { display: block; margin-top: 4px; font-weight: 600; }
+.ask-problem { margin: 4px 0 0; padding: 10px 14px; border-left: 3px solid var(--rust); background: var(--paper); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--card); }
+.ask-table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+.ask-table th, .ask-table td { padding: 6px 10px; text-align: left; border-bottom: 1px dotted var(--rule); vertical-align: top; }
+.ask-table th { font-family: var(--serif); font-weight: 600; background: var(--paper); border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.ask-table td.num, .ask-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ask-table tr:last-child td { border-bottom: 0; }
+.ask-table .sci { font-family: var(--serif); font-style: italic; color: var(--ink-soft); }
+.ask-more { margin: 8px 0 0; font-size: 0.88rem; color: var(--ink-soft); font-style: italic; }
+
 /* ---------- footer ---------- */
 .colophon { padding-top: 8px; padding-bottom: 48px; text-align: center; color: var(--ink-soft); font-size: 0.85rem; }
 .colophon p { margin: 6px auto; max-width: 52em; }
@@ -217,6 +255,7 @@ h1 {
   .lifers .where { grid-column: 1; }
   .stat .n { font-size: 1.8rem; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ask-form { flex-direction: column; }
 }
 @media (max-width: 760px) {
   .world { grid-template-columns: 1fr; }

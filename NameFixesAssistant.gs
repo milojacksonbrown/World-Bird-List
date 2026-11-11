@@ -255,10 +255,11 @@ const GEMINI_THINKING_ = { 'gemini-3-flash-preview': 'low' };
  * No temperature setting: Google's Gemini 3 guidance is to leave it alone
  * (the newest models ignore it and will reject it in future).
  */
-function geminiRequestBody_(prompt, model) {
+function geminiRequestBody_(prompt, model, schema) {
   const generationConfig = {
     responseMimeType: 'application/json',
-    responseSchema: {
+    // The shape the reply must have. Name fixes by default; Ask your list passes its own.
+    responseSchema: schema || {
       type: 'OBJECT',
       properties: { choice: { type: 'INTEGER' }, reason: { type: 'STRING' } },
       required: ['choice', 'reason'],
@@ -395,14 +396,14 @@ function acceptEdit_(col, ticked, suggestion, fix) {
 // ---------------------------------------------------------------------------
 
 /** Sends one prompt to Gemini and returns the reply text. Throws on failure. */
-function callGemini_(prompt, key) {
+function callGemini_(prompt, key, schema) {
   const model = PropertiesService.getScriptProperties().getProperty('GEMINI_MODEL') || ASSIST.GEMINI_MODEL;
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent';
   const res = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
     headers: { 'x-goog-api-key': key },   // in a header, not the URL, so it never shows in errors or logs
-    payload: JSON.stringify(geminiRequestBody_(prompt, model)),
+    payload: JSON.stringify(geminiRequestBody_(prompt, model, schema)),
     muteHttpExceptions: true,
   });
   const code = res.getResponseCode();

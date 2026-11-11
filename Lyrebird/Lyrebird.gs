@@ -12,34 +12,40 @@
  *  replies. See DASHBOARD-DESIGN.md ("AI design").
  *
  *  It's a separate Apps Script project from the spreadsheet, so its public web
- *  address can never touch the spreadsheet. It needs two files:
+ *  address can never touch the spreadsheet. It needs three files:
  *    - Lyrebird.gs (this file)
- *    - NameFixesAssistant.gs (shared: the prompt, the Gemini call, the checks)
+ *    - NameFixesAssistant.gs (shared: the name-fix prompt, the Gemini call, the checks)
+ *    - AskYourList.gs (shared: the question prompt and the query checker)
  *  and the GEMINI_API_KEY in Project Settings ▸ Script Properties.
+ *
+ *  It does two jobs ("actions"):
+ *    - nameFix: pick the AviList species an unmatched eBird name belongs to
+ *    - query:   turn a question about your list into a checked query. Only the
+ *               question is sent; the website runs the query on your data.
  *
  *  Deploy ▸ New deployment ▸ Web app, Execute as: Me, Who has access: Anyone.
  *
  *  Safety:
  *    - Only known actions, with size limits on everything (checkRequest_).
  *    - A daily cap on Gemini calls, shared by everyone (DAILY_CAP).
- *    - Gemini's answer is checked against the shortlist here, and again by
- *      the website.
+ *    - Gemini's answer is checked here (against the shortlist, or against the
+ *      list of allowed tables and fields), and again by the website.
  *    - Nothing is stored except today's count.
  */
 
 const LYREBIRD = {
   // Shown when the web address is opened, so you can tell which code is live.
   // Change it whenever you publish a new version.
-  VERSION: '2026-11-11 (session 3)',
+  VERSION: '2026-11-11 (session 4b)',
   DAILY_CAP: 200,          // Gemini calls per day, for everyone together
   MAX_TEXT: 120,           // longest name accepted, in characters
   MAX_SHORTLIST: 20,       // most candidates accepted
-  ACTIONS: ['nameFix'],    // 'query' is added in session 4
+  ACTIONS: ['nameFix', 'query'],
 };
 
 /** Opening the web address in a browser shows that Lyrebird is running. */
 function doGet() {
-  return json_({ ok: true, service: 'Lyrebird (Life List AI middleman)', version: LYREBIRD.VERSION, usedToday: usedToday_(), dailyCap: LYREBIRD.DAILY_CAP });
+  return json_({ ok: true, service: 'Lyrebird (Life List AI middleman)', version: LYREBIRD.VERSION, actions: LYREBIRD.ACTIONS, usedToday: usedToday_(), dailyCap: LYREBIRD.DAILY_CAP });
 }
 
 /**
@@ -47,7 +53,13 @@ function doGet() {
  *   { "action": "nameFix", "ebird": {"sci": "Corvus cornix", "common": "Hooded Crow"},
  *     "shortlist": [{"sci": "Corvus corone", "common": "Carrion Crow"}, …] }
  * Reply: { "ok": true, "status": "pick" | "none" | "invalid", "choice": 1, "reason": "…" }
- *    or: { "ok": false, "error": "bad-request" | "limit" | "not-configured" | "ai-unavailable", "message": "…" }
+ *
+ * or a question:
+ *   { "action": "query", "question": "Which families have I seen less than 10% of?" }
+ * Reply: { "ok": true, "status": "query", "query": {…}, "reason": "…" }
+ *    or: { "ok": true, "status": "cannot" | "invalid", "reason": "…" }
+ *
+ * Either may fail with: { "ok": false, "error": "bad-request" | "limit" | "not-configured" | "ai-unavailable", "message": "…" }
  */
 function doPost(e) {
   let body;
@@ -66,7 +78,13 @@ function doPost(e) {
   }
 
   try {
-    // action === 'nameFix' (the only one so far)
+    if (req.action === 'query') {
+      const ans = readQueryAnswer_(callGemini_(buildQueryPrompt_(req.question, new Date()), key, queryResponseSchema_()));
+      return json_(ans.status === 'query'
+        ? { ok: true, status: 'query', query: ans.query, reason: ans.reason }
+        : { ok: true, status: ans.status, reason: ans.reason });
+    }
+    // nameFix
     const ans = parseAiAnswer_(callGemini_(buildAiPrompt_(req.ebird, req.shortlist), key), req.shortlist);
     // The candidate's number (1 = first). Worked out here too, so an older copy of
     // NameFixesAssistant.gs (whose answers don't include it) still gives the right number.
@@ -80,7 +98,7 @@ function doPost(e) {
 
 /**
  * Checks a request and keeps only what's needed. Pure: plain values in and out.
- * @return {{problem:string}|{problem:'', action:string, ebird:Object, shortlist:Array}}
+ * @return {{problem:string}|{problem:'', action:'nameFix', ebird:Object, shortlist:Array}|{problem:'', action:'query', question:string}}
  */
 function checkRequest_(b) {
   const text = (v, required) => (typeof v === 'string' || (!required && v == null)) &&
@@ -89,6 +107,12 @@ function checkRequest_(b) {
 
   if (!b || typeof b !== 'object' || Array.isArray(b)) return { problem: 'Missing request.' };
   if (!LYREBIRD.ACTIONS.includes(b.action)) return { problem: 'Unknown action.' };
+
+  if (b.action === 'query') {
+    if (typeof b.question !== 'string' || !b.question.trim()) return { problem: 'The question is missing.' };
+    if (b.question.length > ASK.MAX_QUESTION) return { problem: 'The question is too long (at most ' + ASK.MAX_QUESTION + ' characters).' };
+    return { problem: '', action: 'query', question: clean(b.question) };      // only the question goes on
+  }
 
   // nameFix
   const e = b.ebird;

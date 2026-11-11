@@ -17,7 +17,7 @@
   // Colours come from styles.css, so the charts and map match the page
   const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-  let checklist = null, matching = null;
+  let checklist = null, matching = null, countries = null;
   let charts = [], map = null, countryLayer = null, countryShapes = null;
   let current = null;                  // { text, label, d }: the file shown, so fixes can recalculate it
 
@@ -40,6 +40,8 @@
       const res = await fetch('data/avilist.json');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       checklist = loadChecklist_(await res.json());
+      // Country names for "Ask your list"; if they don't load, countries show as codes
+      fetch('data/countries.json').then(r => r.ok ? r.json() : null).then(c => { countries = c && loadCountries_(c); }).catch(() => {});
       $('#citation').innerHTML = 'Checklist: ' + esc(checklist.citation).replace(/(https:\/\/doi\.org\/\S+)/, '<a href="$1">$1</a>') +
         '. Licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>; converted to a smaller format for this site.';
       $('#controls').hidden = false;
@@ -51,6 +53,7 @@
   }
 
   function show(text, label, keepPlace) {
+    if (!keepPlace) { $('#lifer-search').value = ''; lifersExpanded = false; lastAsk = null; }   // a new file starts fresh
     try {
       const d = buildDashboard_(parseCsvText_(text), checklist, getFixes());
       current = { text, label, d };
@@ -75,13 +78,8 @@
       '<div class="stat"><span class="n">' + n + '</span><span class="label">' + esc(label) + '</span><span class="of">' + esc(of) + '</span></div>'
     ).join('');
 
-    $('#lifers').innerHTML = d.lifers.slice(0, 20).map(l =>
-      '<li><span class="date">' + esc(date(l.date)) + '</span>' +
-      '<span><span class="name">' + esc(l.common) + '</span> <span class="sci">' + esc(l.sci) + '</span></span>' +
-      '<span class="where">' + (l.checklist
-        ? '<a href="https://ebird.org/checklist/' + encodeURIComponent(l.checklist) + '">' + esc(l.place || 'eBird checklist') + '</a>'
-        : esc(l.place)) + '</span></li>'
-    ).join('') || '<li>No countable species found in this file.</li>';
+    renderLifers();
+    renderAsk();                               // re-runs the last question on the new numbers (e.g. after a fix)
 
     renderNameFixes(d);
 
@@ -92,6 +90,42 @@
     redrawTrail();                             // the page is taller now: redraw the decorative route
     if (!keepPlace) $('#dashboard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+
+  // ---------- Latest lifers: the newest few, Show all / Show fewer, and a search ----------
+  const LIFERS_SHOWN = 10;
+  let lifersExpanded = false;
+
+  function liferItem(l) {
+    return '<li><span class="date">' + esc(date(l.date)) + '</span>' +
+      '<span><span class="name">' + esc(l.common) + '</span> <span class="sci">' + esc(l.sci) + '</span></span>' +
+      '<span class="where">' + (l.checklist
+        ? '<a href="https://ebird.org/checklist/' + encodeURIComponent(l.checklist) + '">' + esc(l.place || 'eBird checklist') + '</a>'
+        : esc(l.place)) + '</span></li>';
+  }
+
+  function renderLifers() {
+    const all = current ? current.d.lifers : [];
+    const q = $('#lifer-search').value.trim();
+    const matches = filterLifers_(all, q);
+    const shown = q || lifersExpanded ? matches : matches.slice(0, LIFERS_SHOWN);   // a search shows every match
+    $('#lifers').innerHTML = shown.map(liferItem).join('') ||
+      '<li class="none">' + (q ? 'No lifers match “' + esc(q) + '”.' : 'No countable species found in this file.') + '</li>';
+    $('#lifer-count').textContent = q
+      ? num(matches.length) + ' lifer' + (matches.length === 1 ? '' : 's') + ' match “' + q + '”'
+      : 'Showing ' + num(shown.length) + ' of ' + num(all.length) + ' lifers';
+    const toggle = $('#lifers-toggle');
+    toggle.hidden = !!q || all.length <= LIFERS_SHOWN;
+    toggle.textContent = lifersExpanded ? 'Show fewer' : 'Show all ' + num(all.length) + ' lifers';
+    toggle.setAttribute('aria-expanded', String(lifersExpanded));
+  }
+
+  $('#lifer-search').addEventListener('input', renderLifers);
+  $('#lifers-toggle').addEventListener('click', () => {
+    lifersExpanded = !lifersExpanded;
+    renderLifers();
+    // after collapsing a long list, bring the section back into view
+    if (!lifersExpanded) $('#lifers-title').scrollIntoView({ block: 'nearest' });
+  });
 
   // ---------- Names to check: suggestions, Accept, Don't count it, Undo ----------
   const commonName = sci => { const i = checklist.bySci.get(String(sci).toLowerCase()); return i === undefined ? '' : checklist.species[i].common; };
@@ -227,6 +261,91 @@
     if (e.target.matches('details.others') && e.target.open) fillSpeciesNames();
     redrawTrail();
   }, true);
+
+  // ---------- Ask your list: question -> Lyrebird -> checked query -> run here ----------
+  let lastAsk = null;                  // { query, reason } of the last answered question
+  let askCache = null;                 // { d, data }: the tables for the file shown
+
+  function askTables() {
+    if (!askCache || askCache.d !== current.d || askCache.countries !== countries) {
+      askCache = { d: current.d, countries, data: askData_(current.d, checklist, countries) };
+    }
+    return askCache.data;
+  }
+
+  /** One table cell, formatted by the kind of value. */
+  function askCell(col, v) {
+    const empty = v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length);
+    const cls = col.type === 'number' ? ' class="num"' : '';
+    if (empty) return '<td' + cls + '>—</td>';
+    let text;
+    if (col.type === 'date') text = date(new Date(v + 'T12:00:00'));
+    else if (col.type === 'number') text = col.field === 'pctSeen' ? Number(v).toFixed(1) + '%' : col.field === 'year' ? String(v) : num(v);
+    else if (col.type === 'yesno') text = v ? 'Yes' : 'No';
+    else if (col.type === 'list') text = v.join(', ');
+    else text = v;
+    const latin = ['scientific', 'familyLatin', 'order'].includes(col.field);
+    return '<td' + cls + '>' + (latin ? '<span class="sci">' + esc(text) + '</span>' : esc(text)) + '</td>';
+  }
+
+  function renderAsk() {
+    if (!lastAsk || !current) return;
+    const q = lastAsk.query, res = runQuery_(q, askTables());
+    const noun = ASK_TABLES_[q.table].noun[res.total === 1 ? 0 : 1];
+    $('#ask-result').innerHTML =
+      '<div class="understood"><span class="label">Understood as</span>' + esc(describeQuery_(q)) +
+        '<span class="total">' + (!res.total ? 'None found'
+          : res.total > res.rows.length ? 'Showing ' + num(res.rows.length) + ' of ' + num(res.total) + ' ' + ASK_TABLES_[q.table].noun[1] + ' found'
+            : num(res.total) + ' ' + noun + ' found') + '</span></div>' +
+      (res.rows.length
+        ? '<div class="table-wrap"><table class="ask-table"><thead><tr>' +
+            res.columns.map(c => '<th' + (c.type === 'number' ? ' class="num"' : '') + ' scope="col">' + esc(c.label) + '</th>').join('') +
+          '</tr></thead><tbody>' +
+            res.rows.map(r => '<tr>' + r.map((v, i) => askCell(res.columns[i], v)).join('') + '</tr>').join('') +
+          '</tbody></table></div>'
+        : '') +
+      // Only when the question didn't say how many: a hint that more can be asked for
+      (res.total > res.rows.length && q.limit === ASK.DEFAULT_LIMIT
+        ? '<p class="ask-more">To see more, add how many to your question, e.g. “… show 100”.</p>' : '');
+    redrawTrail();
+  }
+
+  async function ask(question) {
+    const text = String(question || '').trim();
+    if (!text || !current) return;
+    const btn = $('#ask-button'), out = $('#ask-result');
+    btn.disabled = true;
+    out.innerHTML = '<p class="working">Asking Lyrebird…</p>';
+    let ans;
+    try {
+      ans = queryFromLyrebird_(await askLyrebird({ action: 'query', question: text.slice(0, ASK.MAX_QUESTION) }));
+    } catch (e) {
+      ans = { status: 'error', reason: e.message };
+    }
+    btn.disabled = false;
+    if (ans.status === 'query') {
+      lastAsk = ans;
+      renderAsk();
+      return;
+    }
+    lastAsk = null;
+    const why = {
+      cannot: 'That question can\'t be answered from your list yet.',
+      invalid: 'The AI\'s answer didn\'t pass the checks, so it wasn\'t run.',
+      error: 'Lyrebird couldn\'t answer just now.',
+    }[ans.status];
+    out.innerHTML = '<p class="ask-problem"><strong>' + esc(why) + '</strong> ' + esc(ans.reason) +
+      (ans.status === 'error' ? '' : '<br>Try asking about species, families, orders, countries, years or months.') + '</p>';
+    redrawTrail();
+  }
+
+  $('#ask-form').addEventListener('submit', e => { e.preventDefault(); ask($('#ask-input').value); });
+  document.querySelector('.ask-examples').addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    $('#ask-input').value = chip.textContent;
+    ask(chip.textContent);
+  });
 
   // ---------- Plate II: region bars and the Oceans card ----------
   function renderRegions(d) {

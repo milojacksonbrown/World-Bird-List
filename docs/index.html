@@ -74,8 +74,37 @@
 
     <section class="plate" aria-labelledby="lifers-title">
       <h2 id="lifers-title">Latest lifers</h2>
-      <p class="caption">The first time each species was recorded, newest first.</p>
+      <p class="caption">The first time each species was recorded, newest first. Search to find any of them.</p>
+      <div class="lifer-tools">
+        <label class="lifer-search">Search your lifers
+          <input id="lifer-search" type="search" autocomplete="off" placeholder="e.g. plover, Corvus or herons">
+        </label>
+        <p id="lifer-count" class="lifer-count" aria-live="polite"></p>
+      </div>
       <ol id="lifers" class="lifers"></ol>
+      <button id="lifers-toggle" type="button" class="button small" aria-controls="lifers" aria-expanded="false" hidden></button>
+    </section>
+
+    <section id="ask-plate" class="plate" aria-labelledby="ask-title">
+      <h2 id="ask-title">Ask your list</h2>
+      <p class="caption">Ask a question in plain English. The answer comes from your own data, and you're shown how the question was understood.</p>
+      <form id="ask-form" class="ask-form">
+        <label for="ask-input" class="visually-hidden">Your question</label>
+        <input id="ask-input" type="text" maxlength="300" autocomplete="off" placeholder="e.g. Which families have I seen less than 10% of?">
+        <button id="ask-button" type="submit" class="button primary">Ask</button>
+      </form>
+      <div class="ask-examples" aria-label="Example questions">
+        <span>Try:</span>
+        <button type="button" class="chip">Which families have I seen less than 10% of?</button>
+        <button type="button" class="chip">Which year did I get the most lifers?</button>
+        <button type="button" class="chip">What threatened species have I seen?</button>
+        <button type="button" class="chip">Which owls have I seen in Africa?</button>
+        <button type="button" class="chip">What were my first 10 lifers?</button>
+      </div>
+      <p class="ai-note">Your question (and nothing else) goes to Google's Gemini AI through Lyrebird, which turns it into a search.
+        The search is checked against what's allowed, then run here in your browser. Your data never leaves it.
+        (Gemini's free tier may use questions to improve Google's products.)</p>
+      <div id="ask-result" class="ask-result" aria-live="polite"></div>
     </section>
 
     <section id="unmatched-plate" class="plate" aria-labelledby="unmatched-title">
@@ -106,6 +135,7 @@
   <!-- Shared code: the same functions the Google Sheets version uses (copied by tools/build-site.js) -->
   <script src="lib/LifeList.js"></script>
   <script src="lib/NameFixesAssistant.js"></script>
+  <script src="lib/AskYourList.js"></script>
   <script src="js/dashboard-data.js"></script>
   <script src="js/config.js"></script>
   <script src="js/app.js"></script>

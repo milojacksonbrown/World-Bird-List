@@ -162,6 +162,19 @@ function findSpecies_(checklist, text) {
   return null;
 }
 
+/**
+ * Lifers matching a search: common name, scientific name or family, ignoring
+ * capitals, accents and punctuation (so "ruppell" finds "Rüppell's Vulture").
+ * An empty search returns every lifer. Keeps the newest-first order.
+ */
+function filterLifers_(lifers, text) {
+  // apostrophes removed (Rüppell's -> ruppells), other punctuation becomes a space
+  const tidy = s => normalise_(s).replace(/'/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const q = tidy(text);
+  if (!q) return lifers;
+  return lifers.filter(l => [l.common, l.sci, l.family].some(f => tidy(f).includes(q)));
+}
+
 /** Does this species count towards this region? */
 function inRegion_(s, region) {
   return s.regions.includes(region) || (s.regions.includes('Worldwide') && LAND_REGIONS_.includes(region));
@@ -186,7 +199,7 @@ function buildDashboard_(rows, checklist, fixes) {
   // Lifers: every species seen, with its first sighting, newest first
   const lifers = [...ebird.bySpecies.entries()].map(([i, x]) => {
     const s = checklist.species[i];
-    return { sci: s.sci, common: s.common, family: s.familyEn || s.family, date: x.date || null, place: x.loc || '', checklist: x.sub || '' };
+    return { i, sci: s.sci, common: s.common, family: s.familyEn || s.family, date: x.date || null, place: x.loc || '', checklist: x.sub || '' };
   }).sort((a, b) => (b.date ? b.date.getTime() : 0) - (a.date ? a.date.getTime() : 0));
 
   // Lifers per year, and per month of the year (all Januaries together…) for seasonality
@@ -230,5 +243,92 @@ function buildDashboard_(rows, checklist, fixes) {
     unmatched: [...ebird.unmatched.values()].sort((a, b) => b.n - a.n),
     countries: [...places.countries.values()].map(c => ({ code: c.code, species: c.species.size }))
       .sort((a, b) => b.species - a.species),
+    // For "Ask your list": the countries each species was recorded in (species number -> codes)
+    speciesCountries: [...places.countries.values()].reduce((m, c) => {
+      c.species.forEach(i => { (m[i] = m[i] || []).push(c.code); });
+      return m;
+    }, {}),
   };
+}
+
+// ---------------------------------------------------------------------------
+//  Ask your list (uses AskYourList.js, loaded before this)
+// ---------------------------------------------------------------------------
+
+/**
+ * Unpacks countries.json (made by tools/build-countries.js).
+ * @return {{byCode: Object<string,{name:string, region:string}>, names: Object<string,string>}}
+ *   names: every name a country is known by (tidied) -> its usual name, e.g. "uk" -> "United Kingdom"
+ */
+function loadCountries_(data) {
+  const byCode = {}, names = {};
+  Object.keys((data && data.countries) || {}).forEach(code => {
+    const [name, region, ...others] = data.countries[code];
+    byCode[code] = { name, region };
+    [name].concat(others).forEach(n => { names[askTidy_(n)] = name; });
+  });
+  return { byCode, names };
+}
+
+/** A date as YYYY-MM-DD, in the visitor's own time zone (as the lifers list shows it). */
+function isoDay_(d) {
+  return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') : null;
+}
+
+/**
+ * The visitor's list as the tables questions are run on (see ASK_TABLES_).
+ * Families and orders are worked out from the species rows by runQuery_.
+ * @param {Object} d  from buildDashboard_
+ * @param {Object} checklist  from loadChecklist_
+ * @param {Object} [countries]  from loadCountries_; without it, countries show as codes
+ */
+function askData_(d, checklist, countries) {
+  const C = countries || { byCode: {}, names: {} };
+  const countryName = code => (C.byCode[code] && C.byCode[code].name) || code;
+  const firsts = new Map(d.lifers.map(l => [l.i, l]));
+  const species = checklist.species.map(s => {
+    const l = firsts.get(s.i);
+    return {
+      common: s.common, scientific: s.sci, family: s.familyEn || s.family, familyLatin: s.family, order: s.order,
+      iucn: String(s.iucn || '').split(' ')[0], threatened: THREATENED_.test(s.iucn), extinct: s.extinct,
+      seen: !!l,
+      firstSeen: l ? isoDay_(l.date) : null,
+      firstYear: l && l.date ? l.date.getFullYear() : null,
+      firstMonth: l && l.date ? l.date.getMonth() + 1 : null,
+      firstPlace: l ? l.place : null,
+      countries: (d.speciesCountries[s.i] || []).map(countryName),
+      // "Worldwide" species count towards every land region, as on the region bars
+      regions: checklist.regions.filter(r => r !== 'Worldwide' && inRegion_(s, r)),
+    };
+  });
+  const years = [...new Set(Object.keys(d.perYear).concat(Object.keys(d.speciesPerYear), Object.keys(d.checklistsPerYear)))]
+    .map(Number).sort((a, b) => a - b)
+    .map(y => ({ year: y, lifers: d.perYear[y] || 0, species: d.speciesPerYear[y] || 0, checklists: d.checklistsPerYear[y] || 0 }));
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const months = MONTH_NAMES.map((name, m) => ({
+    month: m + 1, name, lifers: d.perMonth[m], species: d.speciesPerMonth[m], checklists: d.checklistsPerMonth[m],
+  }));
+  return {
+    species,
+    countries: d.countries.map(c => ({ country: countryName(c.code), region: (C.byCode[c.code] && C.byCode[c.code].region) || '', species: c.species })),
+    years,
+    months,
+    countryNames: C.names,
+  };
+}
+
+/**
+ * Turns Lyrebird's reply to a question into something to show. The query is
+ * checked again here, so a faulty or tampered Lyrebird still can't run
+ * anything outside the allowed tables and fields.
+ * @return {{status:'query', query:Object, reason:string}|{status:'cannot'|'invalid'|'error', reason:string}}
+ */
+function queryFromLyrebird_(reply) {
+  if (!reply || !reply.ok) return { status: 'error', reason: (reply && reply.message) || 'no answer from the AI' };
+  const reason = String(reply.reason || '').slice(0, 200);
+  if (reply.status === 'cannot') return { status: 'cannot', reason: reason || 'That question can\'t be answered from your list.' };
+  if (reply.status !== 'query') return { status: 'invalid', reason: reason || 'the AI\'s answer could not be used' };
+  const checked = checkQuery_(reply.query);
+  if (checked.problem) return { status: 'invalid', reason: checked.problem };
+  return { status: 'query', query: checked.query, reason };
 }
