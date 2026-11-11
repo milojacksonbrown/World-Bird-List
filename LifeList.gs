@@ -254,9 +254,17 @@ function summariseRange_(texts) {
 // ---------------------------------------------------------------------------
 // AviList parsing
 // ---------------------------------------------------------------------------
+/**
+ * A heading in a standard form, so different AviList versions compare equal:
+ * "SCIENTIFIC NAME" (v2026) and "Scientific_name" (v2025) -> "scientific_name".
+ */
+function headerKey_(h) {
+  return String(h).trim().toLowerCase().replace(/[^a-z0-9#]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
 function findCol_(headers, patterns) {
   for (const p of patterns) {
-    const i = headers.findIndex(h => p.test(String(h).trim()));
+    const i = headers.findIndex(h => p.test(String(h).trim()) || p.test(headerKey_(h)));
     if (i >= 0) return i;
   }
   return -1;
@@ -268,12 +276,13 @@ function titleCase_(s) {
 
 /** Turns the AviList sheet values into a list of species objects. */
 function parseAviList_(values) {
-  const hr = values.findIndex(r => r.some(c => /^taxon_rank$/i.test(String(c).trim())));
-  if (hr < 0) throw new Error('Could not find the "Taxon_rank" column in the AviList file.');
+  // v2025 calls the rank column "Taxon_rank", v2026 calls it "RANK"
+  const hr = values.findIndex(r => r.some(c => /^(taxon_)?rank$/.test(headerKey_(c))));
+  if (hr < 0) throw new Error('Could not find the rank column ("Taxon_rank" or "RANK") in the AviList file.');
   const H = values[hr];
   const col = {
-    seq: findCol_(H, [/^sequence$/i]),
-    rank: findCol_(H, [/^taxon_rank$/i]),
+    seq: findCol_(H, [/^sequence$/i, /^#$/]),
+    rank: findCol_(H, [/^taxon_rank$/i, /^rank$/i]),
     order: findCol_(H, [/^order$/i]),
     family: findCol_(H, [/^family$/i]),
     familyEn: findCol_(H, [/^family_english_name$/i]),
@@ -291,10 +300,12 @@ function parseAviList_(values) {
   });
   const get = (r, k) => (col[k] >= 0 && r[col[k]] !== null && r[col[k]] !== undefined) ? String(r[col[k]]).trim() : '';
   const species = [];
+  const familyNames = new Map();   // v2026 has no family English name column: it's on each family's own row
   let cur = null, n = 0;
   for (let i = hr + 1; i < values.length; i++) {
     const r = values[i];
     const rank = get(r, 'rank').toLowerCase();
+    if (rank === 'family') familyNames.set(get(r, 'family'), get(r, 'en'));
     if (rank === 'species') {
       n++;
       const sci = get(r, 'sci').replace(/\s+/g, ' ');
@@ -329,6 +340,7 @@ function parseAviList_(values) {
     }
   }
   species.forEach(s => {
+    if (!s.familyEn) s.familyEn = familyNames.get(s.family) || '';
     const texts = s.range ? [s.range] : s.sspRanges.map(x => x.range);
     const sum = summariseRange_(texts);
     s.breed = sum.breed; s.breedSub = sum.breedSub; s.nonbreed = sum.nonbreed; s.regionSet = sum.regionSet;

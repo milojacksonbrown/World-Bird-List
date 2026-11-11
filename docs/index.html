@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Life List: a field guide to your birds</title>
+  <meta name="description" content="Upload your eBird data and see your bird life list as a field guide, matched to the AviList global checklist. Your file never leaves your browser.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="masthead">
+    <p class="kicker">A field guide to your birds</p>
+    <h1>Life List</h1>
+    <p class="lede">Upload your eBird data and see every species you've seen, matched to
+      <a href="https://www.avilist.org/">AviList</a>, the global checklist of the world's birds.</p>
+
+    <div id="controls" class="controls" hidden>
+      <label class="button primary">
+        <input id="file" type="file" accept=".csv,text/csv,.zip">
+        Upload MyEBirdData.csv
+      </label>
+      <button id="sample" class="button" type="button">Try with sample data</button>
+    </div>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <details class="howto">
+      <summary>Where do I get my eBird data?</summary>
+      <ol>
+        <li>On eBird, go to <a href="https://ebird.org/downloadMyData">My eBird ▸ Download My Data</a> and submit the request.</li>
+        <li>eBird emails you a link to a .zip file. Download it and unzip it.</li>
+        <li>Upload the <code>MyEBirdData.csv</code> file inside. It's read in your browser and never uploaded anywhere.</li>
+      </ol>
+    </details>
+  </header>
+
+  <main id="dashboard" hidden>
+    <p id="source-label" class="source-label"></p>
+
+    <section class="plate" aria-labelledby="count-title">
+      <p class="plate-no">Plate I</p>
+      <h2 id="count-title">The count</h2>
+      <div id="stats" class="stats"></div>
+    </section>
+
+    <section class="plate" aria-labelledby="lifers-title">
+      <p class="plate-no">Plate II</p>
+      <h2 id="lifers-title">Latest lifers</h2>
+      <p class="caption">The first time each species was recorded, newest first.</p>
+      <ol id="lifers" class="lifers"></ol>
+    </section>
+
+    <section id="unmatched-plate" class="plate" aria-labelledby="unmatched-title">
+      <p class="plate-no">Plate III</p>
+      <h2 id="unmatched-title">Names to check</h2>
+      <p class="caption">These eBird names don't match an AviList species yet, often because the two checklists
+        disagree about what counts as a species. They aren't counted above.</p>
+      <ul id="unmatched" class="unmatched"></ul>
+    </section>
+  </main>
+
+  <footer class="colophon">
+    <p id="citation"></p>
+    <p>Your eBird file is read in your browser and is never uploaded. Not affiliated with eBird or AviList.</p>
+  </footer>
+
+  <!-- Shared code: the same functions the Google Sheets version uses (copied by tools/build-site.js) -->
+  <script src="lib/LifeList.js"></script>
+  <script src="lib/NameFixesAssistant.js"></script>
+  <script src="js/dashboard-data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

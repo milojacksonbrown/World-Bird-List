@@ -1,0 +1,7 @@
+# macOS folder settings
+.DS_Store
+
+# Personal raw data: never commit (the site's sample data is a cleaned copy in docs/)
+private/
+Documents/ebird_*.zip
+Documents/MyEBirdData*.csv
