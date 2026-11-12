@@ -13,8 +13,11 @@ const KEY = 'TEST-KEY-not-a-real-key';
 const SHORTLIST = [{ sci: 'Corvus corone', common: 'Carrion Crow' }, { sci: 'Corvus corax', common: 'Common Raven' }];
 const request = extra => JSON.stringify({ action: 'nameFix', ebird: { sci: 'Corvus cornix', common: 'Hooded Crow' }, shortlist: SHORTLIST, ...extra });
 
-/** A fresh Lyrebird with fake Google services. geminiReply: [httpCode, body]. */
-function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part of Carrion Crow here' }], props = {} } = {}) {
+/**
+ * A fresh Lyrebird with fake Google services. geminiReply: [httpCode, body].
+ * geminiReplies: several, one per call in order (e.g. Flash fails, then Gemma answers).
+ */
+function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part of Carrion Crow here' }], geminiReplies, props = {} } = {}) {
   const store = new Map(Object.entries({ GEMINI_API_KEY: KEY, ...props }));
   const calls = [];
   const fakes = {
@@ -28,7 +31,7 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: text => ({ setMimeType: () => ({ text }) }) },
     UrlFetchApp: { fetch: (url, opts) => {
       calls.push({ url, opts });
-      const [code, body] = geminiReply;
+      const [code, body] = geminiReplies ? geminiReplies[Math.min(calls.length - 1, geminiReplies.length - 1)] : geminiReply;
       const text = typeof body === 'string' ? body : JSON.stringify(
         code === 200 ? { candidates: [{ content: { parts: [{ text: JSON.stringify(body) }] } }] } : body);
       return { getResponseCode: () => code, getContentText: () => text };
@@ -47,7 +50,7 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
 test('opening the web address shows it is running, without revealing the key', () => {
   const { run } = setup();
   const text = run('doGet')().text;
-  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-11 (session 4b)', actions: ['nameFix', 'query'], usedToday: 0, dailyCap: 200 });
+  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-12 (session 4d)', actions: ['nameFix', 'query'], usedToday: 0, dailyCap: 200 });
   assert.ok(!text.includes(KEY));
 });
 
@@ -168,7 +171,7 @@ test('query: a query outside the allowed tables is not passed on', () => {
 
 test('query: "cannot" is passed on with the reason', () => {
   const { post } = setup({ geminiReply: [200, { status: 'cannot', reason: 'Counties are not in the tables.' }] });
-  assert.deepEqual(post(question('What did I see in Norfolk?')), { ok: true, status: 'cannot', reason: 'Counties are not in the tables.' });
+  assert.deepEqual(post(question('What did I see in Norfolk?')), { ok: true, status: 'cannot', reason: 'Counties are not in the tables.', model: 'gemini-3-flash-preview', backup: false });
 });
 
 test('query: missing or over-long questions are refused before Gemini is asked', () => {
@@ -177,4 +180,76 @@ test('query: missing or over-long questions are refused before Gemini is asked',
   assert.equal(post(question('x'.repeat(301))).error, 'bad-request');
   assert.equal(post(JSON.stringify({ action: 'query', question: { text: 'hi' } })).error, 'bad-request');
   assert.equal(calls.length, 0);
+});
+
+// ---------- the backup model (Gemma) ----------
+
+const FLASH = 'gemini-3-flash-preview', GEMMA = 'gemma-4-26b-a4b-it';
+const modelOf = call => decodeURIComponent(call.url.match(/models\/([^:]+):/)[1]);
+const OUT_OF_QUOTA = [429, { error: { message: 'Quota exceeded' } }];
+
+test('name fixes: the main model answers when it can, and says so', () => {
+  const { post, calls } = setup();
+  const r = post(request());
+  assert.deepEqual([r.model, r.backup], [FLASH, false]);
+  assert.deepEqual(calls.map(modelOf), [FLASH]);
+});
+
+test('name fixes: when Flash is out of quota, Gemma answers, through the same checks', () => {
+  const { post, calls, store, today } = setup({ geminiReplies: [OUT_OF_QUOTA, [200, { choice: 1, reason: 'Hooded Crow is treated as part of Carrion Crow' }]] });
+  const r = post(request());
+  assert.deepEqual(calls.map(modelOf), [FLASH, GEMMA]);
+  assert.equal(r.status, 'pick');
+  assert.equal(r.choice, 1);
+  assert.deepEqual([r.model, r.backup], [GEMMA, true]);
+  assert.equal(store.get(today), '1');            // counts once towards the daily cap
+});
+
+test('name fixes: Gemma\'s answer is still checked against the shortlist', () => {
+  const { post } = setup({ geminiReplies: [OUT_OF_QUOTA, [200, { choice: 7, reason: 'made up' }]] });
+  assert.equal(post(request()).status, 'invalid');
+});
+
+test('questions: when Flash is busy, Gemma answers, and its query is checked', () => {
+  const { post, calls } = setup({ geminiReplies: [[503, { error: { message: 'high demand' } }],
+    [200, { status: 'query', reason: 'Years', table: 'years', region: '', filters: [], sortField: 'lifers', sortDir: 'desc', limit: 1 }]] });
+  const r = post(JSON.stringify({ action: 'query', question: 'Which year did I get the most lifers?' }));
+  assert.deepEqual(calls.map(modelOf), [FLASH, GEMMA]);
+  assert.equal(r.status, 'query');
+  assert.equal(r.query.sortField, 'lifers');
+  assert.equal(r.backup, true);
+  // Gemma gets the same reply shape (responseSchema) as Flash
+  assert.ok(JSON.parse(calls[1].opts.payload).generationConfig.responseSchema.properties.table);
+});
+
+test('questions: a bad query from Gemma is rejected, as from Flash', () => {
+  const { post } = setup({ geminiReplies: [OUT_OF_QUOTA, [200, { status: 'query', reason: '', table: 'species', region: '',
+    filters: [{ field: ' состояния_seen', op: 'eq', value: 'true' }], sortField: '', sortDir: 'desc', limit: 0 }]] });
+  const r = post(JSON.stringify({ action: 'query', question: 'Which threatened species have I seen?' }));
+  assert.equal(r.status, 'invalid');
+  assert.equal(r.query, undefined);
+});
+
+test('no fallback for problems Gemma would have too (a bad key or request)', () => {
+  const { post, calls } = setup({ geminiReply: [403, { error: { message: 'API key not valid' } }] });
+  const r = post(request());
+  assert.equal(r.error, 'ai-unavailable');
+  assert.deepEqual(calls.map(modelOf), [FLASH]);
+});
+
+test('when both models fail, the reply explains both, without the key', () => {
+  const { post } = setup({ geminiReplies: [OUT_OF_QUOTA, [500, { error: { message: 'Internal error encountered.' } }]] });
+  const r = post(request());
+  assert.equal(r.error, 'ai-unavailable');
+  assert.match(r.message, /free-tier limit reached.*backup model: Gemini error 500/);
+  assert.ok(!JSON.stringify(r).includes(KEY));
+});
+
+test('the backup can be changed or turned off with Script Properties', () => {
+  const other = setup({ geminiReplies: [OUT_OF_QUOTA, [200, { choice: 1, reason: 'x' }]], props: { GEMINI_FALLBACK_MODEL: 'gemma-4-31b-it' } });
+  other.post(request());
+  assert.deepEqual(other.calls.map(modelOf), [FLASH, 'gemma-4-31b-it']);
+  const off = setup({ geminiReplies: [OUT_OF_QUOTA], props: { GEMINI_FALLBACK_MODEL: 'none' } });
+  assert.equal(off.post(request()).error, 'ai-unavailable');
+  assert.deepEqual(off.calls.map(modelOf), [FLASH]);
 });

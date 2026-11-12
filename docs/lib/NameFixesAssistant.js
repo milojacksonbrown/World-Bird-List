@@ -28,6 +28,11 @@ const ASSIST = {
   // Gemini model. Override without editing code by adding a Script Property
   // GEMINI_MODEL. Check Google AI Studio for which models are on the free tier.
   GEMINI_MODEL: 'gemini-3-flash-preview',
+  // Backup model, tried when the main one is out of free quota, busy or
+  // withdrawn. Gemma is Google's open model: it has its own, larger free
+  // quota, but is slower and less accurate, which the answer checks allow for.
+  // Override with a Script Property GEMINI_FALLBACK_MODEL ('none' turns it off).
+  GEMINI_FALLBACK_MODEL: 'gemma-4-26b-a4b-it',
   AI_PAUSE_MS: 1500,         // wait between AI calls, to stay inside free-tier limits
   MAX_PER_RUN: 30,           // suggestions per run; the rest are done next run
   // Apps Script stops any run at 6 minutes. Don't start a new suggestion once
@@ -236,10 +241,14 @@ function buildAiPrompt_(ebird, shortlist) {
     'AviList candidates:',
     ...lines,
     '',
-    'Which candidate should this eBird bird be counted as in AviList? Checklists disagree about',
-    'what is a full species: genus moves, splits, lumps and renames are common. If AviList',
-    'treats the eBird bird as a subspecies or form of one of the candidates (for example',
-    'Hooded Crow as part of Carrion Crow), choose that candidate and say so in the reason.',
+    'Which candidate should this eBird bird be counted as in AviList?',
+    'The eBird name is usually NOT in the list: that is why you are being asked. The two',
+    'checklists disagree about what is a full species: genus moves, splits, lumps and renames',
+    'are common. Think about which candidate species, as AviList defines it, includes the',
+    'eBird bird\'s population.',
+    'If AviList treats the eBird bird as a subspecies or form of one of the candidates',
+    '(for example Hooded Crow as part of Carrion Crow), choose that candidate and say so in the',
+    'reason. Similar-looking names are not enough: choose by what the bird is.',
     'Answer 0 only if the eBird bird belongs to none of the candidates.',
     'Reply with JSON only: {"choice": <candidate number, or 0 for none>, "reason": "<one short sentence>"}',
   ].join('\n');
@@ -396,9 +405,48 @@ function acceptEdit_(col, ticked, suggestion, fix) {
 //  Google parts (need Apps Script)
 // ---------------------------------------------------------------------------
 
-/** Sends one prompt to Gemini and returns the reply text. Throws on failure. */
+/** Sends one prompt to Gemini (or the backup model) and returns the reply text. Throws on failure. */
 function callGemini_(prompt, key, schema) {
-  const model = PropertiesService.getScriptProperties().getProperty('GEMINI_MODEL') || ASSIST.GEMINI_MODEL;
+  return askGemini_(prompt, key, schema).text;
+}
+
+/** The models to try, in order: the main one, then the backup (if any). */
+function geminiModels_() {
+  const props = PropertiesService.getScriptProperties();
+  const main = props.getProperty('GEMINI_MODEL') || ASSIST.GEMINI_MODEL;
+  const backup = props.getProperty('GEMINI_FALLBACK_MODEL') || ASSIST.GEMINI_FALLBACK_MODEL;
+  return backup && backup !== 'none' && backup !== main ? [main, backup] : [main];
+}
+
+/**
+ * Is a Gemini error worth trying the backup model for? Yes for problems
+ * with this model: out of quota (429), busy or failing (5xx), or not
+ * available to this key (404). No for problems that the backup would hit
+ * too, such as a bad key (401, 403) or a malformed request (400).
+ */
+function shouldFallBack_(code) {
+  return code === 429 || code === 404 || code >= 500;
+}
+
+/**
+ * Asks Gemini, falling back to the backup model if the main one can't answer.
+ * @return {{text: string, model: string, backup: boolean}}  backup: true if the backup model answered
+ */
+function askGemini_(prompt, key, schema) {
+  const models = geminiModels_();
+  let failure = null;
+  for (let i = 0; i < models.length; i++) {
+    const r = fetchGemini_(models[i], prompt, key, schema);
+    if (r.ok) return { text: r.text, model: models[i], backup: i > 0 };
+    if (failure) failure.message += '; backup model: ' + r.error.message;
+    else failure = r.error;
+    if (!shouldFallBack_(r.code)) break;
+  }
+  throw failure;
+}
+
+/** One request to one model. Never throws for an HTTP error: returns it instead. */
+function fetchGemini_(model, prompt, key, schema) {
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent';
   const res = UrlFetchApp.fetch(url, {
     method: 'post',
@@ -408,13 +456,11 @@ function callGemini_(prompt, key, schema) {
     muteHttpExceptions: true,
   });
   const code = res.getResponseCode();
-  if (code === 429) throw new Error('free-tier limit reached, try again later');
-  if (code !== 200) {
-    let detail = '';
-    try { detail = JSON.parse(res.getContentText()).error.message; } catch (e) { }
-    throw new Error('Gemini error ' + code + (detail ? ': ' + String(detail).slice(0, 300) : ''));
-  }
-  return readGeminiText_(JSON.parse(res.getContentText()));
+  if (code === 200) return { ok: true, code, text: readGeminiText_(JSON.parse(res.getContentText())) };
+  if (code === 429) return { ok: false, code, error: new Error('free-tier limit reached, try again later') };
+  let detail = '';
+  try { detail = JSON.parse(res.getContentText()).error.message; } catch (e) { }
+  return { ok: false, code, error: new Error('Gemini error ' + code + (detail ? ': ' + String(detail).slice(0, 300) : '')) };
 }
 
 /** Adds the Suggested species / Confidence / Reason / Accept headers if missing. */

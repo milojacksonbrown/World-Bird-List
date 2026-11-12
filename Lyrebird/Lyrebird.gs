@@ -31,12 +31,16 @@
  *    - Gemini's answer is checked here (against the shortlist, or against the
  *      list of allowed tables and fields), and again by the website.
  *    - Nothing is stored except today's count.
+ *
+ *  Models: Gemini 3 Flash first; if it's out of free quota or busy, the
+ *  backup Gemma 4 model answers instead (askGemini_ in NameFixesAssistant.gs).
+ *  A request counts once towards the daily cap, whichever model answers.
  */
 
 const LYREBIRD = {
   // Shown when the web address is opened, so you can tell which code is live.
   // Change it whenever you publish a new version.
-  VERSION: '2026-11-11 (session 4b)',
+  VERSION: '2026-11-12 (session 4d)',
   DAILY_CAP: 200,          // Gemini calls per day, for everyone together
   MAX_TEXT: 120,           // longest name accepted, in characters
   MAX_SHORTLIST: 20,       // most candidates accepted
@@ -52,7 +56,8 @@ function doGet() {
  * The website sends a JSON request here, e.g.
  *   { "action": "nameFix", "ebird": {"sci": "Corvus cornix", "common": "Hooded Crow"},
  *     "shortlist": [{"sci": "Corvus corone", "common": "Carrion Crow"}, …] }
- * Reply: { "ok": true, "status": "pick" | "none" | "invalid", "choice": 1, "reason": "…" }
+ * Reply: { "ok": true, "status": "pick" | "none" | "invalid", "choice": 1, "reason": "…",
+ *          "model": "gemini-3-flash-preview", "backup": false }
  *
  * or a question:
  *   { "action": "query", "question": "Which families have I seen less than 10% of?" }
@@ -78,19 +83,23 @@ function doPost(e) {
   }
 
   try {
+    // Both jobs say which model answered: the main one, or the backup (Gemma)
+    // if the main one was out of quota or busy. See askGemini_.
     if (req.action === 'query') {
-      const ans = readQueryAnswer_(callGemini_(buildQueryPrompt_(req.question, new Date()), key, queryResponseSchema_()));
+      const ai = askGemini_(buildQueryPrompt_(req.question, new Date()), key, queryResponseSchema_());
+      const ans = readQueryAnswer_(ai.text);
       return json_(ans.status === 'query'
-        ? { ok: true, status: 'query', query: ans.query, reason: ans.reason }
-        : { ok: true, status: ans.status, reason: ans.reason });
+        ? { ok: true, status: 'query', query: ans.query, reason: ans.reason, model: ai.model, backup: ai.backup }
+        : { ok: true, status: ans.status, reason: ans.reason, model: ai.model, backup: ai.backup });
     }
     // nameFix
-    const ans = parseAiAnswer_(callGemini_(buildAiPrompt_(req.ebird, req.shortlist), key), req.shortlist);
+    const ai = askGemini_(buildAiPrompt_(req.ebird, req.shortlist), key);
+    const ans = parseAiAnswer_(ai.text, req.shortlist);
     // The candidate's number (1 = first). Worked out here too, so an older copy of
     // NameFixesAssistant.gs (whose answers don't include it) still gives the right number.
     const choice = ans.status !== 'pick' ? 0
       : (ans.choice || req.shortlist.findIndex(c => c.sci === ans.pick.sci) + 1);
-    return json_({ ok: true, status: ans.status, choice, reason: ans.reason });
+    return json_({ ok: true, status: ans.status, choice, reason: ans.reason, model: ai.model, backup: ai.backup });
   } catch (err) {
     return json_({ ok: false, error: 'ai-unavailable', message: String(err.message || err).slice(0, 200) });
   }

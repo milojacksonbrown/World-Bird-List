@@ -56,7 +56,8 @@ const QUESTIONS = [
     q => q.table === 'species' && q.region === 'Australasia' && has(q, 'seen', 'eq', 'false') &&
       (has(q, 'iucn', 'eq', 'EN') || has(q, 'threatened', 'eq', 'true'))],
   ['Show my lifers from March 2026', 'seen, first seen in March 2026',
-    q => q.table === 'species' && seen(q) &&
+    // (a first-seen filter implies "seen": only seen species have a first sighting)
+    q => q.table === 'species' &&
       ((has(q, 'firstMonth', 'eq', 3) && has(q, 'firstYear', 'eq', 2026)) || (has(q, 'firstSeen', 'gte', '2026-03-01') && q.filters.some(f => f.field === 'firstSeen' && /^(lt|lte)$/.test(f.op))))],
   ['Which hummingbirds have I seen?', 'seen, family contains "hummingbird"',
     q => q.table === 'species' && seen(q) && q.filters.some(f => /^family/.test(f.field) && /hummingbird|trochilidae/i.test(f.value))],
@@ -118,8 +119,9 @@ async function main() {
     }
     if (ok) right++;
     const secs = ((Date.now() - started) / 1000).toFixed(1);
-    console.log((ok ? '✔ ' : '✘ ') + question + '\n    ' + understood + '  (' + secs + ' s)');
-    lines.push('| ' + [question, expected, understood, ok ? 'Yes' : '**No**'].map(s => String(s).replace(/\|/g, '\\|')).join(' | ') + ' |');
+    const model = reply.model ? reply.model + (reply.backup ? ' (backup)' : '') : '';
+    console.log((ok ? '✔ ' : '✘ ') + question + '\n    ' + understood + '  (' + secs + ' s' + (model ? ', ' + model : '') + ')');
+    lines.push('| ' + [question, expected, understood, model || '–', ok ? 'Yes' : '**No**'].map(s => String(s).replace(/\|/g, '\\|')).join(' | ') + ' |');
   }
   const summary = right + ' of ' + QUESTIONS.length + ' understood as expected';
   console.log('\n' + summary);
@@ -129,8 +131,8 @@ async function main() {
     'Run on ' + new Date().toISOString().slice(0, 10) + ' against Lyrebird version ' + status.version + ' (' + summary + ').',
     'Made by `node tools/check-questions.js`. "Understood as" is the plain-English line the website shows.',
     '',
-    '| Question | Counts as right | Understood as | Right? |',
-    '|---|---|---|---|',
+    '| Question | Counts as right | Understood as | Answered by | Right? |',
+    '|---|---|---|---|---|',
   ].concat(lines).join('\n') + '\n';
   fs.writeFileSync(path.join(root, 'Tests', 'question-accuracy.md'), md);
   console.log('Saved Tests/question-accuracy.md');

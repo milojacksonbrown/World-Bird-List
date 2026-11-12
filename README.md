@@ -70,7 +70,9 @@ A table of families, plus: "Understood as: Families where % seen is under 10%, l
 
 A public website can't contain an API key, because anyone could copy it. So the site talks to **Lyrebird**, a small Google Apps Script web app I run. Lyrebird holds the Gemini key, accepts only two kinds of request with strict size limits, checks Gemini's answers, and has a **daily cap** of 200 AI calls shared by everyone. It stores nothing except that day's count. (It's named after the bird that passes on sounds it has heard.)
 
-If Lyrebird is unavailable or the cap is reached, **the rest of the site keeps working**: string matching still suggests fixes, and only the AI parts pause.
+**Two models, one fallback.** Lyrebird asks Gemini 3 Flash first. If Flash is out of free quota, busy, or withdrawn, it asks Google's open Gemma 4 model instead, which has its own, larger free quota. Gemma is slower and less accurate, but its answers go through exactly the same checks, and the site says when the backup answered so the visitor knows to look closer.
+
+If both models are unavailable or the cap is reached, **the rest of the site keeps working**: string matching still suggests fixes, and only the AI parts pause.
 
 ## Testing
 
@@ -88,7 +90,7 @@ If Lyrebird is unavailable or the cap is reached, **the rest of the site keeps w
 | Gemini 3 Flash (preview), the default | **14 of 16** | 1 | 1 | about 3 s |
 | Gemma 4 26B (open model) | 10 of 16 | 3 | 3 | 4 to 80 s |
 
-Full results: [Flash](Tests/question-accuracy.md), [Gemma](Tests/question-accuracy-gemma.md). **No wrong answer reached the screen with either model.** Every malformed query was caught by the checker. Gemma's failures included a field name with a stray Russian word in it, and an invented field (`tourist_count_of_species_per_country`). Flash is the default because it's both more accurate and much faster. Switching model is a single setting in Lyrebird.
+Full results: [Flash](Tests/question-accuracy.md), [Gemma](Tests/question-accuracy-gemma.md), and a [live run with the fallback switched on](Tests/question-accuracy-fallback.md) (Flash out of quota, so Gemma answered 14 of 16; 12 right, the rest refused by the checker). **No wrong answer reached the screen with either model.** Every malformed query was caught by the checker. Gemma's failures included field names with stray Russian and Arabic words or a leftover token (`<unused694>seen`) in them, and an invented field (`tourist_count_of_species_per_country`). It also sometimes repeats itself in its explanations ("…ls-ls-ls-ls"), which is why the site labels backup answers "worth a closer look". Flash is the default because it's both more accurate and much faster, and Gemma is the automatic backup when Flash's small free quota runs out. Both are settings in Lyrebird (`GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`).
 
 **What testing found.** On the first live run, Gemini chose the right table every time but dropped the filters and sorting. I'd marked those parts of the reply as *optional*, and the model leaves optional keys out when it's forced to reply in JSON. Making every key required, with explicit "none" values, fixed it, and a test now guards against it coming back. The checker caught every malformed query, so nothing wrong was ever run.
 
@@ -97,7 +99,7 @@ The free Gemini tier turned out to be the real constraint, more than the code. O
 - an older model was unavailable to new API keys;
 - a newer one was overloaded.
 
-That's why the site is designed to keep working without the AI.
+That's why Lyrebird falls back to a second model, and why the site keeps working without the AI.
 
 ## Privacy
 
