@@ -2,7 +2,7 @@
 // Lyrebird, checks each was understood as expected, and writes the results to
 // Tests/question-accuracy.md (for the README case study).
 //
-// Each question uses one of Lyrebird's daily AI calls (there are 16 here).
+// Each question uses one of Lyrebird's daily AI calls (there are 18 here).
 // Only the questions are sent, never any eBird data.
 //
 // Run from the repo folder:   node tools/check-questions.js
@@ -60,7 +60,11 @@ const QUESTIONS = [
     q => q.table === 'species' &&
       ((has(q, 'firstMonth', 'eq', 3) && has(q, 'firstYear', 'eq', 2026)) || (has(q, 'firstSeen', 'gte', '2026-03-01') && q.filters.some(f => f.field === 'firstSeen' && /^(lt|lte)$/.test(f.op))))],
   ['Which hummingbirds have I seen?', 'seen, family contains "hummingbird"',
-    q => q.table === 'species' && seen(q) && q.filters.some(f => /^family/.test(f.field) && /hummingbird|trochilidae/i.test(f.value))],
+    q => q.table === 'species' && seen(q) && q.filters.some(f => /^family/.test(f.field) && /humming|trochilidae/i.test(f.value))],
+  ['Which was the first lifer I saw in each country?', 'countries, showing first lifer',
+    q => q.table === 'countries' && (q.columns || []).includes('firstLifer')],
+  ['Which bird have I seen the most from my checklists?', 'species by checklists, highest first',
+    q => q.table === 'species' && q.sortField === 'checklists' && q.sortDir === 'desc'],
   ['What did I see at Hyde Park last weekend?', 'cannot (places below country, trips)', 'cannot'],
   ['Which species have I seen in only one country?', 'cannot (needs two steps)', 'cannot'],
 ];

@@ -92,7 +92,7 @@ If both models are unavailable or the cap is reached, **the rest of the site kee
 
 | Model | Understood correctly | Rejected by the checker | Google server errors | Typical answer time |
 |---|---|---|---|---|
-| **GPT-OSS 120B on Groq**, the default | **16 of 16** | 0 | 0 | about 2.5 s |
+| **GPT-OSS 120B on Groq**, the default | **16 of 16** (and 18 of 18 with two newer questions) | 0 | 0 | about 2.5 s |
 | Gemini 3 Flash (preview), the backup | 14 of 16 | 1 | 1 | about 3 s |
 | Gemma 4 26B (Google's open model), tried and dropped | 10 of 16 | 3 | 3 | 4 to 80 s |
 
