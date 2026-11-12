@@ -101,9 +101,9 @@
         <button type="button" class="chip">Which owls have I seen in Africa?</button>
         <button type="button" class="chip">What were my first 10 lifers?</button>
       </div>
-      <p class="ai-note">Your question (and nothing else) goes to Google's Gemini AI through Lyrebird, which turns it into a search.
-        The search is checked against what's allowed, then run here in your browser. Your data never leaves it.
-        (Gemini's free tier may use questions to improve Google's products.)</p>
+      <p class="ai-note">Your question (and nothing else) goes through Lyrebird to an AI model (OpenAI's GPT-OSS on Groq, or Google's
+        Gemini as a backup), which turns it into a search. The search is checked against what's allowed, then run here in your browser.
+        Your data never leaves it. (Free AI services may keep what's sent, so don't include anything personal.)</p>
       <div id="ask-result" class="ask-result" aria-live="polite"></div>
     </section>
 
@@ -112,8 +112,8 @@
       <p class="caption">These eBird names don't match an AviList species yet, often because the two checklists
         disagree about what counts as a species. They aren't counted above until you fix them.</p>
       <p class="ai-note"><strong>Suggest a match</strong> first compares the name with AviList on your computer. If that isn't
-        conclusive, it asks Google's Gemini AI to choose from a shortlist, sending only the bird names involved
-        (Gemini's free tier may use them to improve Google's products). Nothing changes until you accept.</p>
+        conclusive, it asks an AI model (through Lyrebird) to choose from a shortlist, sending only the bird names involved.
+        Nothing changes until you accept.</p>
       <ul id="unmatched" class="unmatched"></ul>
       <datalist id="avilist-names"></datalist>
       <div id="fixes" class="fixes" hidden>

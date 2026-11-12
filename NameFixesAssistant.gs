@@ -264,15 +264,18 @@ const GEMINI_THINKING_ = { 'gemini-3-flash-preview': 'low' };
  * No temperature setting: Google's Gemini 3 guidance is to leave it alone
  * (the newest models ignore it and will reject it in future).
  */
+// The shape a name-fix reply must have (Google's schema style; converted for Groq)
+const NAME_FIX_SCHEMA_ = {
+  type: 'OBJECT',
+  properties: { choice: { type: 'INTEGER' }, reason: { type: 'STRING' } },
+  required: ['choice', 'reason'],
+};
+
 function geminiRequestBody_(prompt, model, schema) {
   const generationConfig = {
     responseMimeType: 'application/json',
     // The shape the reply must have. Name fixes by default; Ask your list passes its own.
-    responseSchema: schema || {
-      type: 'OBJECT',
-      properties: { choice: { type: 'INTEGER' }, reason: { type: 'STRING' } },
-      required: ['choice', 'reason'],
-    },
+    responseSchema: schema || NAME_FIX_SCHEMA_,
   };
   const level = GEMINI_THINKING_[model];
   if (level) generationConfig.thinkingConfig = { thinkingLevel: level };
@@ -320,7 +323,8 @@ function parseAiAnswer_(text, shortlist) {
  * @return {{row:number, sci:string, common:string, ssp:string}|null}  ssp: the full subspecies name
  */
 function subspeciesMatch_(ebird, species) {
-  const words = String((ebird && ebird.sci) || '').trim().toLowerCase().split(/\s+/);
+  // eBird group names carry a bracketed part, e.g. "Corvus cornix [cornix Group]": ignore it
+  const words = String((ebird && ebird.sci) || '').replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').trim().toLowerCase().split(/\s+/);
   if (words.length < 2) return null;
   const genus = words[0], name = words[words.length - 1];
   const hits = species.filter(s => s.ssp && String(s.sci).toLowerCase().split(' ')[0] === genus &&
@@ -434,42 +438,120 @@ function acceptEdit_(col, ticked, suggestion, fix) {
 
 /** Sends one prompt to Gemini (or the backup model) and returns the reply text. Throws on failure. */
 function callGemini_(prompt, key, schema) {
-  return askGemini_(prompt, key, schema).text;
+  return askAi_(prompt, key, schema).text;
 }
 
-/** The models to try, in order: the main one, then the backup (if any). */
-function geminiModels_() {
+/**
+ * The models to try, in order. Model names starting "groq:" go to Groq
+ * (e.g. "groq:openai/gpt-oss-120b"); all others go to Google (Gemini, Gemma).
+ * Script Property AI_MODELS sets the whole list, comma-separated, e.g.
+ *   groq:openai/gpt-oss-120b, gemini-3-flash-preview, gemma-4-26b-a4b-it
+ * Without it: GEMINI_MODEL (or the default), then GEMINI_FALLBACK_MODEL.
+ */
+function aiModels_() {
   const props = PropertiesService.getScriptProperties();
+  const list = String(props.getProperty('AI_MODELS') || '').split(',').map(m => m.trim()).filter(Boolean);
+  if (list.length) return list;
   const main = props.getProperty('GEMINI_MODEL') || ASSIST.GEMINI_MODEL;
   const backup = props.getProperty('GEMINI_FALLBACK_MODEL') || ASSIST.GEMINI_FALLBACK_MODEL;
   return backup && backup !== 'none' && backup !== main ? [main, backup] : [main];
 }
 
+/** Which company runs a model: 'groq' or 'google'. */
+function aiProvider_(model) {
+  return /^groq:/i.test(model) ? 'groq' : 'google';
+}
+
 /**
- * Is a Gemini error worth trying the backup model for? Yes for problems
- * with this model: out of quota (429), busy or failing (5xx), or not
- * available to this key (404). No for problems that the backup would hit
- * too, such as a bad key (401, 403) or a malformed request (400).
+ * Is an error worth trying the next model for? Always, if the next model is
+ * from another company (its own key, quota and servers). For the same
+ * company, only for problems with this model: out of quota (429), busy or
+ * failing (5xx), or not available to this key (404). Not for problems the
+ * next model would hit too, such as a bad key (401, 403) or request (400).
  */
-function shouldFallBack_(code) {
+function shouldFallBack_(code, nextProvider, thisProvider) {
+  if (nextProvider && thisProvider && nextProvider !== thisProvider) return true;
   return code === 429 || code === 404 || code >= 500;
 }
 
 /**
- * Asks Gemini, falling back to the backup model if the main one can't answer.
- * @return {{text: string, model: string, backup: boolean}}  backup: true if the backup model answered
+ * Asks the AI, trying each model in turn until one answers.
+ * @param {string} key  the Google (Gemini) API key; Groq's is read from GROQ_API_KEY
+ * @return {{text: string, model: string, backup: boolean}}  backup: true if not the first model
  */
-function askGemini_(prompt, key, schema) {
-  const models = geminiModels_();
+function askAi_(prompt, key, schema) {
+  const models = aiModels_();
   let failure = null;
   for (let i = 0; i < models.length; i++) {
-    const r = fetchGemini_(models[i], prompt, key, schema);
+    const provider = aiProvider_(models[i]);
+    const r = provider === 'groq' ? fetchGroq_(models[i].replace(/^groq:/i, ''), prompt, schema)
+      : fetchGemini_(models[i], prompt, key, schema);
     if (r.ok) return { text: r.text, model: models[i], backup: i > 0 };
-    if (failure) failure.message += '; backup model: ' + r.error.message;
-    else failure = r.error;
-    if (!shouldFallBack_(r.code)) break;
+    if (failure) failure.message += '; then ' + models[i] + ': ' + r.error.message;
+    else failure = new Error(models.length > 1 ? models[i] + ': ' + r.error.message : r.error.message);
+    const next = models[i + 1];
+    if (!next || !shouldFallBack_(r.code, aiProvider_(next), provider)) break;
   }
   throw failure;
+}
+
+/** Older name, kept for the tests and anything that still calls it. */
+function askGemini_(prompt, key, schema) {
+  return askAi_(prompt, key, schema);
+}
+
+/**
+ * Converts our (Google-style) reply shape to standard JSON Schema for Groq's
+ * strict mode: lower-case types, every field required, no extra fields.
+ */
+function toJsonSchema_(g) {
+  if (!g || typeof g !== 'object') return g;
+  const out = {};
+  if (g.type) out.type = String(g.type).toLowerCase();
+  if (g.enum) out.enum = g.enum.slice();
+  if (g.items) out.items = toJsonSchema_(g.items);
+  if (g.properties) {
+    out.properties = {};
+    Object.keys(g.properties).forEach(k => { out.properties[k] = toJsonSchema_(g.properties[k]); });
+    out.required = Object.keys(g.properties);
+    out.additionalProperties = false;
+  }
+  return out;
+}
+
+/** The request Groq is sent (its "OpenAI-compatible" chat format). */
+function groqRequestBody_(prompt, model, schema) {
+  const body = {
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    response_format: { type: 'json_schema', json_schema: { name: 'reply', strict: true, schema: toJsonSchema_(schema || NAME_FIX_SCHEMA_) } },
+  };
+  // OpenAI's open models "reason" before answering; a little is enough, and saves quota
+  if (/^openai\/gpt-oss/.test(model)) body.reasoning_effort = 'low';
+  return body;
+}
+
+/** One request to a Groq model. Never throws for an HTTP error: returns it instead. */
+function fetchGroq_(model, prompt, schema) {
+  const key = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
+  if (!key) return { ok: false, code: 401, error: new Error('no GROQ_API_KEY in Script Properties') };
+  const res = UrlFetchApp.fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + key },   // in a header, never the URL
+    payload: JSON.stringify(groqRequestBody_(prompt, model, schema)),
+    muteHttpExceptions: true,
+  });
+  const code = res.getResponseCode();
+  if (code === 200) {
+    const msg = ((JSON.parse(res.getContentText()).choices || [])[0] || {}).message || {};
+    if (!msg.content) return { ok: false, code: 502, error: new Error('empty answer from Groq') };
+    return { ok: true, code, text: msg.content };
+  }
+  if (code === 429) return { ok: false, code, error: new Error('Groq free-tier limit reached, try again later') };
+  let detail = '';
+  try { detail = JSON.parse(res.getContentText()).error.message; } catch (e) { }
+  return { ok: false, code, error: new Error('Groq error ' + code + (detail ? ': ' + String(detail).slice(0, 300) : '')) };
 }
 
 /** One request to one model. Never throws for an HTTP error: returns it instead. */

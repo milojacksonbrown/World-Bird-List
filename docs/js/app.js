@@ -162,8 +162,9 @@
     return res.json();
   }
 
-  // Shown when Lyrebird's main model (Gemini Flash) was out of quota or busy and the backup answered
-  const BACKUP_NOTE = '<p class="backup-note">Answered by the backup AI model (Gemma), which is less accurate. Worth a closer look.</p>';
+  // Shown when Lyrebird's first-choice model was out of quota or busy and a backup answered
+  const backupNote = model => '<p class="backup-note">Answered by a backup AI model (' +
+    esc(String(model || 'unknown').replace(/^groq:/, '')) + '), which may be less accurate. Worth a closer look.</p>';
 
   async function suggest(li, u) {
     const btn = li.querySelector('[data-act="suggest"]'), out = li.querySelector('.um-result');
@@ -173,14 +174,14 @@
     if (!matching) matching = speciesForMatching_(checklist);
     const ebird = { sci: u.sci, common: u.common };
     const prep = prepareSuggestion_(ebird, matching);   // string matching and shortlist, on this computer
-    let d = prep.final, backup = false;
+    let d = prep.final, backup = null;
     if (!d) {
       out.innerHTML = '<p class="working">Checking with Lyrebird…</p>';
       let ans;
       try {
         const reply = await askLyrebird({ action: 'nameFix', ebird, shortlist: prep.shortlist.map(c => ({ sci: c.sci, common: c.common })) });
         ans = answerFromLyrebird_(reply, prep.shortlist);
-        backup = !!reply.backup;
+        backup = reply.backup ? reply.model : null;
       } catch (e) {
         ans = { status: 'error', reason: e.message };
       }
@@ -191,7 +192,7 @@
     out.innerHTML = (d.sci
       ? '<div class="suggestion"><span class="conf conf-' + d.confidence.toLowerCase() + '">' + esc(d.confidence) + '</span> ' +
           '<strong>' + esc(commonName(d.sci)) + '</strong> <span class="sci">' + esc(d.sci) + '</span>' +
-          '<p class="why">' + esc(d.reason) + '</p>' + (backup ? BACKUP_NOTE : '') +
+          '<p class="why">' + esc(d.reason) + '</p>' + (backup ? backupNote(backup) : '') +
           '<button type="button" class="button small primary" data-act="accept" data-sci="' + esc(d.sci) + '">Accept</button></div>'
       : '<div class="suggestion"><strong>No confident match found.</strong><p class="why">' + esc(d.reason) + '</p></div>') +
       othersHtml(prep.shortlist, d.sci);
@@ -298,7 +299,7 @@
     const noun = ASK_TABLES_[q.table].noun[res.total === 1 ? 0 : 1];
     $('#ask-result').innerHTML =
       '<div class="understood"><span class="label">Understood as</span>' + esc(describeQuery_(q)) +
-        (lastAsk.backup ? BACKUP_NOTE : '') +
+        (lastAsk.backup ? backupNote(lastAsk.backup) : '') +
         '<span class="total">' + (!res.total ? 'None found'
           : res.total > res.rows.length ? 'Showing ' + num(res.rows.length) + ' of ' + num(res.total) + ' ' + ASK_TABLES_[q.table].noun[1] + ' found'
             : num(res.total) + ' ' + noun + ' found') + '</span></div>' +
@@ -325,7 +326,7 @@
     try {
       const reply = await askLyrebird({ action: 'query', question: text.slice(0, ASK.MAX_QUESTION) });
       ans = queryFromLyrebird_(reply);
-      ans.backup = !!reply.backup;
+      ans.backup = reply.backup ? reply.model : null;
     } catch (e) {
       ans = { status: 'error', reason: e.message };
     }

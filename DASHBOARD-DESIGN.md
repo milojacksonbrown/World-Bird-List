@@ -64,6 +64,7 @@ The Gemini key can't go in a public web page: anyone could copy it from the page
 - It calls Gemini and returns the reply.
 - **Daily cap** (for example 200 requests a day in total). After that it says "AI limit reached for today", and the site keeps working without AI.
 - It never stores requests and has no access to any spreadsheet.
+- *Added 12 Nov (later):* models are tried in the order set by Script Property `AI_MODELS`; names starting `groq:` go to Groq (key `GROQ_API_KEY`, strict JSON Schema). Recommended: `groq:openai/gpt-oss-120b, gemini-3-flash-preview`. GPT-OSS 120B scored 16/16 at ~2.5 s.
 - *Added 12 Nov:* if the main model (Gemini 3 Flash) is out of free quota, busy or withdrawn, it asks a backup model (Gemma 4) instead, with the same checks. The reply says which model answered, and the site shows a note when it was the backup. (Testing: Flash 14/16, Gemma 10/16 on the same questions; Flash's free daily quota ran out within hours.)
 
 ### 1. Name Fixes assistant

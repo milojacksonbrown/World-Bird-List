@@ -30,6 +30,7 @@
 const ASK = {
   MAX_QUESTION: 300,       // longest question accepted, in characters
   MAX_FILTERS: 6,
+  MAX_COLUMNS: 6,          // extra columns a question can ask to see
   MAX_VALUE: 100,          // longest filter value, in characters
   DEFAULT_LIMIT: 25,       // rows shown when the question doesn't say
   MAX_LIMIT: 200,
@@ -68,6 +69,8 @@ const ASK_TABLES_ = {
       firstYear: ['number', 'Year first seen', 'year of my first sighting'],
       firstMonth: ['number', 'Month first seen', 'month of my first sighting, 1 = January'],
       firstPlace: ['text', 'Where first seen', 'eBird location of my first sighting'],
+      firstCountry: ['text', 'Country first seen', 'country of my first sighting (where it became a lifer)'],
+      checklists: ['number', 'Checklists', 'how many of my eBird checklists it is on: how often I have seen it (0 if never)'],
       countries: ['list', 'Countries', 'countries where I have recorded it, e.g. "Kenya"'],
       regions: ['list', 'Regions', 'AviList regions where it breeds, winters or passes through'],
     },
@@ -111,8 +114,13 @@ const ASK_TABLES_ = {
       country: ['text', 'Country', 'e.g. "Kenya"'],
       region: ['text', 'Region', 'the AviList region the country is counted in'],
       species: ['number', 'Species', 'number of species I have recorded there'],
+      lifers: ['number', 'Lifers', 'species whose first-ever sighting (lifer) was in this country'],
+      firstVisit: ['date', 'First visit', 'date of my first record in this country'],
+      firstSpecies: ['text', 'First bird recorded', 'the first species I recorded in this country (may already have been on my list)'],
+      firstLifer: ['text', 'First lifer', 'the first species I saw in this country that was new to my list'],
+      firstLiferDate: ['date', 'First lifer date', 'date of that first lifer'],
     },
-    show: ['country', 'region', 'species'],
+    show: ['country', 'region', 'species', 'lifers'],
     sort: ['species', 'desc'],
   },
   years: {
@@ -189,6 +197,8 @@ function buildQueryPrompt_(question, today) {
     '  sortField: the field to order the results by, or "" for the usual order.',
     '  sortDir: "asc" or "desc".',
     '  limit: how many rows to show (1 to ' + ASK.MAX_LIMIT + '), or 0 for the usual number.',
+    '  columns: extra fields of the same table to show in the answer, [] if none. Use it when the',
+    '           question asks for something the filters and sort don\'t already show.',
     '',
     'Rules:',
     '- "I have seen", "my lifers", "on my list" means seen = true on the species table.',
@@ -198,18 +208,22 @@ function buildQueryPrompt_(question, today) {
     '- A country is matched by its English name, e.g. "Kenya", "United Kingdom".',
     '- "Most", "best", "top" means sort descending; "least", "fewest", "worst" ascending.',
     '- "Which year ..." questions use the years table; "which month" or "season" use months.',
+    '- "Seen the most", "most often", "most common on my checklists": species sorted by checklists, descending.',
+    '- "In each country" questions use the countries table, one row per country, with the asked-for fields in columns.',
+    '  A "lifer" is a species new to my list: "first lifer in each country" is firstLifer (with firstLiferDate);',
+    '  "first bird I saw in each country" is firstSpecies (with firstVisit).',
     '- Questions about a place inside a country (a county, a park), about counts of individual birds,',
     '  about other people, or about anything not in these tables: status "cannot".',
     '',
     'Examples:',
     'Q: Which families have I seen less than 10% of in Africa?',
-    'A: {"status":"query","reason":"Families, counting African species only, where under 10% are seen.","table":"families","region":"Africa","filters":[{"field":"pctSeen","op":"lt","value":"10"}],"sortField":"pctSeen","sortDir":"asc","limit":0}',
+    'A: {"status":"query","reason":"Families, counting African species only, where under 10% are seen.","table":"families","region":"Africa","filters":[{"field":"pctSeen","op":"lt","value":"10"}],"sortField":"pctSeen","sortDir":"asc","limit":0,"columns":[]}',
     'Q: What were my first five lifers?',
-    'A: {"status":"query","reason":"Species I have seen, oldest first sighting first, five of them.","table":"species","region":"","filters":[{"field":"seen","op":"eq","value":"true"}],"sortField":"firstSeen","sortDir":"asc","limit":5}',
+    'A: {"status":"query","reason":"Species I have seen, oldest first sighting first, five of them.","table":"species","region":"","filters":[{"field":"seen","op":"eq","value":"true"}],"sortField":"firstSeen","sortDir":"asc","limit":5,"columns":[]}',
     'Q: Which threatened birds have I seen in Kenya?',
-    'A: {"status":"query","reason":"Threatened species recorded in Kenya.","table":"species","region":"","filters":[{"field":"threatened","op":"eq","value":"true"},{"field":"countries","op":"has","value":"Kenya"}],"sortField":"","sortDir":"desc","limit":0}',
+    'A: {"status":"query","reason":"Threatened species recorded in Kenya.","table":"species","region":"","filters":[{"field":"threatened","op":"eq","value":"true"},{"field":"countries","op":"has","value":"Kenya"}],"sortField":"","sortDir":"desc","limit":0,"columns":[]}',
     'Q: How many birds did I see on my trip last weekend?',
-    'A: {"status":"cannot","reason":"Trips and individual days aren\'t in the tables; try asking about a year or a month.","table":"species","region":"","filters":[],"sortField":"","sortDir":"desc","limit":0}',
+    'A: {"status":"cannot","reason":"Trips and individual days aren\'t in the tables; try asking about a year or a month.","table":"species","region":"","filters":[],"sortField":"","sortDir":"desc","limit":0,"columns":[]}',
     '',
     'Question: ' + JSON.stringify(String(question)),
   ].join('\n');
@@ -240,9 +254,10 @@ function queryResponseSchema_() {
       sortField: { type: 'STRING' },
       sortDir: { type: 'STRING', enum: ['asc', 'desc'] },
       limit: { type: 'INTEGER' },
+      columns: { type: 'ARRAY', items: { type: 'STRING' } },
     },
-    required: ['status', 'reason', 'table', 'region', 'filters', 'sortField', 'sortDir', 'limit'],
-    propertyOrdering: ['status', 'reason', 'table', 'region', 'filters', 'sortField', 'sortDir', 'limit'],
+    required: ['status', 'reason', 'table', 'region', 'filters', 'sortField', 'sortDir', 'limit', 'columns'],
+    propertyOrdering: ['status', 'reason', 'table', 'region', 'filters', 'sortField', 'sortDir', 'limit', 'columns'],
   };
 }
 
@@ -329,7 +344,17 @@ function checkQuery_(raw) {
     limit = Number(raw.limit);
     if (!Number.isInteger(limit) || limit < 1 || limit > ASK.MAX_LIMIT) return { problem: 'The limit must be a whole number from 1 to ' + ASK.MAX_LIMIT + '.' };
   }
-  return { problem: '', query: { table: raw.table, region, filters, sortField, sortDir, limit } };
+  // Extra columns to show: fields of this table, each once (older replies have none)
+  const columns = [];
+  if (raw.columns != null) {
+    if (!Array.isArray(raw.columns)) return { problem: 'Columns must be a list.' };
+    if (raw.columns.length > ASK.MAX_COLUMNS) return { problem: 'Too many columns (at most ' + ASK.MAX_COLUMNS + ').' };
+    for (const c of raw.columns) {
+      if (!field(c)) return { problem: 'The ' + raw.table + ' table has no field "' + c + '" to show.' };
+      if (!columns.includes(c)) columns.push(c);
+    }
+  }
+  return { problem: '', query: { table: raw.table, region, filters, sortField, sortDir, limit, columns } };
 }
 
 /**
@@ -385,7 +410,10 @@ function describeQuery_(q) {
   const words = type === 'date' ? (q.sortDir === 'desc' ? 'newest first' : 'oldest first')
     : type === 'number' ? (q.sortDir === 'desc' ? 'highest first' : 'lowest first')
       : (q.sortDir === 'desc' ? 'Z to A' : 'A to Z');
-  s += ', ' + label.toLowerCase() + ' ' + words + ', up to ' + q.limit + '.';
+  s += ', ' + label.toLowerCase() + ' ' + words + ', up to ' + q.limit;
+  const shown = (q.columns || []).filter(c => !T.show.includes(c));
+  if (shown.length) s += ', showing ' + shown.map(c => T.fields[c][1].toLowerCase()).join(', ').replace(/, ([^,]*)$/, ' and $1');
+  s += '.';
   return s.replace(/\s+,/g, ',');
 }
 
@@ -488,6 +516,7 @@ function runQuery_(q, data) {
   // Columns: the table's usual ones, plus any field the question filtered or sorted by
   // (not the table's usual order, e.g. month number, which needs no column of its own)
   const fields = T.show.slice();
+  (q.columns || []).forEach(f => { if (!fields.includes(f)) fields.push(f); });     // asked for by the question
   // (a yes/no filter needs no column either: every row would say the same)
   const extra = q.filters.filter(f => T.fields[f.field][0] !== 'yesno').map(f => f.field)
     .concat(q.sortField === T.sort[0] ? [] : [q.sortField]);

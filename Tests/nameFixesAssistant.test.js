@@ -250,7 +250,7 @@ test('no file in the repo contains something that looks like a Google API key', 
 
 // Species with their subspecies names (the `ssp` field), as on the website
 const WITH_SSP = [
-  { row: 0, sci: 'Corvus corone', common: 'Carrion Crow', alt: '', ssp: 'corone;cornix;sharpii;pallescens' },
+  { row: 0, sci: 'Corvus corone', common: 'Carrion Crow', alt: '', ssp: 'corone;cornix;sharpii;pallescens;capellanus' },
   { row: 1, sci: 'Corvus corax', common: 'Northern Raven', alt: '', ssp: 'corax;varius;tingitanus' },
   { row: 2, sci: 'Porphyrio porphyrio', common: 'Purple Swamphen', alt: '', ssp: 'porphyrio;madagascariensis;melanotus;poliocephalus' },
   { row: 3, sci: 'Porphyrio albus', common: 'White Swamphen', alt: '', ssp: '' },
@@ -265,6 +265,8 @@ test('an eBird species that AviList lists as a subspecies is matched to its pare
   assert.equal(sspMatch('Corvus cornix', 'Hooded Crow').ssp, 'Corvus corone cornix');
   assert.equal(sspMatch('Porphyrio melanotus', 'Australasian Swamphen').sci, 'Porphyrio porphyrio');
   assert.equal(sspMatch('Corvus corone cornix', '').sci, 'Corvus corone');     // eBird subspecies form too
+  assert.equal(sspMatch('Corvus cornix [cornix Group]', 'Hooded Crow (Hooded)').sci, 'Corvus corone');   // eBird group name
+  assert.equal(sspMatch('Corvus cornix capellanus', 'Hooded Crow (Mesopotamian)').sci, 'Corvus corone');
 });
 
 test('no subspecies answer when there is none, or more than one, or the genus differs', () => {
@@ -293,4 +295,16 @@ test('species records without subspecies names (the spreadsheet) behave as befor
   ctx.SSP_SPECIES = WITH_SSP.map(({ ssp, ...rest }) => rest);
   assert.equal(run('subspeciesMatch_(E, SSP_SPECIES)'), null);
   assert.equal(run('prepareSuggestion_(E, SSP_SPECIES)').final, null);
+});
+
+test('real species whose names contain "domesticus" or "hybrida" are counted; domestic types and hybrids are not', () => {
+  const parse = (sci, common) => { ctx.S = sci; ctx.N = common; return run('parseEbirdName_(S, N)'); };
+  assert.equal(parse('Passer domesticus', 'House Sparrow').binomial, 'Passer domesticus');
+  assert.equal(parse('Chlidonias hybrida', 'Whiskered Tern').binomial, 'Chlidonias hybrida');
+  assert.equal(parse('Chloephaga hybrida', 'Kelp Goose').binomial, 'Chloephaga hybrida');
+  assert.equal(parse('Anas platyrhynchos (Domestic type)', 'Mallard (Domestic type)').reason, 'domestic');
+  assert.equal(parse('Anser sp. (Domestic type)', 'Domestic goose sp. (Domestic type)').skip, true);
+  assert.equal(parse('Corvus corone x cornix', 'Carrion x Hooded Crow (hybrid)').reason, 'sp/hybrid');
+  assert.equal(parse('Anas platyrhynchos x rubripes', 'Mallard x American Black Duck (hybrid)').skip, true);
+  assert.equal(parse('Larus sp.', 'gull sp.').skip, true);
 });

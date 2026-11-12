@@ -390,8 +390,11 @@ function parseEbirdName_(sci, common) {
   sci = String(sci || '').trim().replace(/\s+/g, ' ');
   common = String(common || '').trim();
   if (!sci) return { skip: true, reason: 'blank' };
-  if (/domestic/i.test(sci + ' ' + common)) return { skip: true, reason: 'domestic' };
-  if (/\bsp\.?$|\bsp\.\s|\bx\b|\(hybrid\)|hybrid/i.test(sci + ' ' + common)) return { skip: true, reason: 'sp/hybrid' };
+  // eBird labels these "(Domestic type)" and "(hybrid)" / "A x B". Match those labels only:
+  // looser words also hit real species, e.g. House Sparrow (Passer domesticus),
+  // Whiskered Tern (Chlidonias hybrida) and Kelp Goose (Chloephaga hybrida).
+  if (/\(domestic type\)/i.test(sci + ' ' + common)) return { skip: true, reason: 'domestic' };
+  if (/\bsp\.?$|\bsp\.\s|\bx\b|\(hybrid\)/i.test(sci + ' ' + common)) return { skip: true, reason: 'sp/hybrid' };
   const t = sci.split(' ');
   if (t.length < 2 || /\//.test(t[0]) || /\//.test(t[1]) || /^\[|^\(/.test(t[1])) return { skip: true, reason: 'slash' };
   const binomial = t[0] + ' ' + t[1].toLowerCase();

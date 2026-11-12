@@ -76,7 +76,7 @@ const BUSY = /limit reached|error 5\d\d|high demand|try again later|fetch failed
 async function askLyrebird(question, retried) {
   const reply = await askOnce(question).catch(e => ({ ok: false, message: e.message }));
   if (!retried && !reply.ok && BUSY.test(reply.message || '')) {
-    console.log('    (Gemini is busy or at its per-minute limit: waiting ' + RETRY_MS / 1000 + ' s and trying again)');
+    console.log('    (The AI is busy or at its per-minute limit: waiting ' + RETRY_MS / 1000 + ' s and trying again)');
     await sleep(RETRY_MS);
     return askLyrebird(question, true);
   }
@@ -92,8 +92,12 @@ async function askOnce(question) {
 async function main() {
   if (!LYREBIRD_URL) throw new Error('No LYREBIRD_URL in docs/js/config.js');
   const status = await (await fetch(LYREBIRD_URL)).json();
-  if (!(status.actions || []).includes('query') || (process.argv[2] && status.version !== process.argv[2])) {
+  if (!(status.actions || []).includes('query')) {
     throw new Error('The live Lyrebird (version ' + status.version + ') doesn\'t know "query" yet: redeploy it first.');
+  }
+  if (process.argv[2] && status.version !== process.argv[2]) {
+    throw new Error('The live Lyrebird is version ' + status.version + ', not ' + process.argv[2] +
+      '. Just after a redeploy Google can serve the old version for a minute or two: try again shortly.');
   }
   const lines = [];
   let right = 0;

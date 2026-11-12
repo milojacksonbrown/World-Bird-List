@@ -32,8 +32,10 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
     UrlFetchApp: { fetch: (url, opts) => {
       calls.push({ url, opts });
       const [code, body] = geminiReplies ? geminiReplies[Math.min(calls.length - 1, geminiReplies.length - 1)] : geminiReply;
-      const text = typeof body === 'string' ? body : JSON.stringify(
-        code === 200 ? { candidates: [{ content: { parts: [{ text: JSON.stringify(body) }] } }] } : body);
+      const groq = /api\.groq\.com/.test(url);       // Groq replies in OpenAI's chat format
+      const text = typeof body === 'string' ? body : JSON.stringify(code !== 200 ? body
+        : groq ? { choices: [{ message: { content: JSON.stringify(body) } }] }
+          : { candidates: [{ content: { parts: [{ text: JSON.stringify(body) }] } }] });
       return { getResponseCode: () => code, getContentText: () => text };
     } },
   };
@@ -50,7 +52,7 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
 test('opening the web address shows it is running, without revealing the key', () => {
   const { run } = setup();
   const text = run('doGet')().text;
-  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-12 (session 4d)', actions: ['nameFix', 'query'], usedToday: 0, dailyCap: 200 });
+  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-12 (session 4f)', actions: ['nameFix', 'query'], usedToday: 0, dailyCap: 200 });
   assert.ok(!text.includes(KEY));
 });
 
@@ -156,7 +158,7 @@ test('query: sends only the question, with the query reply shape, and returns a 
   const r = post(question('Which families have I seen less than 10% of?'));
   assert.equal(r.ok, true);
   assert.equal(r.status, 'query');
-  assert.deepEqual(r.query, { table: 'families', region: '', filters: [{ field: 'pctSeen', op: 'lt', value: 10 }], sortField: 'pctSeen', sortDir: 'asc', limit: 25 });
+  assert.deepEqual(r.query, { table: 'families', region: '', filters: [{ field: 'pctSeen', op: 'lt', value: 10 }], sortField: 'pctSeen', sortDir: 'asc', limit: 25, columns: [] });
   const sent = JSON.parse(calls[0].opts.payload);
   assert.match(sent.contents[0].parts[0].text, /Question: "Which families have I seen less than 10% of\?"/);
   assert.ok(sent.generationConfig.responseSchema.properties.table, 'asks for the query shape, not the name-fix shape');
@@ -241,7 +243,7 @@ test('when both models fail, the reply explains both, without the key', () => {
   const { post } = setup({ geminiReplies: [OUT_OF_QUOTA, [500, { error: { message: 'Internal error encountered.' } }]] });
   const r = post(request());
   assert.equal(r.error, 'ai-unavailable');
-  assert.match(r.message, /free-tier limit reached.*backup model: Gemini error 500/);
+  assert.match(r.message, /gemini-3-flash-preview: free-tier limit reached.*then gemma-4-26b-a4b-it: Gemini error 500/);
   assert.ok(!JSON.stringify(r).includes(KEY));
 });
 
@@ -252,4 +254,55 @@ test('the backup can be changed or turned off with Script Properties', () => {
   const off = setup({ geminiReplies: [OUT_OF_QUOTA], props: { GEMINI_FALLBACK_MODEL: 'none' } });
   assert.equal(off.post(request()).error, 'ai-unavailable');
   assert.deepEqual(off.calls.map(modelOf), [FLASH]);
+});
+
+// ---------- Groq (another company's models, chosen with AI_MODELS) ----------
+
+const GROQ = 'groq:openai/gpt-oss-120b';
+const viaGroq = call => /api\.groq\.com/.test(call.url);
+
+test('AI_MODELS can put a Groq model first: it gets the Groq key, strict JSON, and answers', () => {
+  const { post, calls } = setup({ props: { AI_MODELS: GROQ + ', gemini-3-flash-preview', GROQ_API_KEY: 'TEST-GROQ-KEY' } });
+  const r = post(request());
+  assert.equal(r.status, 'pick');
+  assert.deepEqual([r.model, r.backup], [GROQ, false]);
+  assert.equal(calls.length, 1);
+  assert.ok(viaGroq(calls[0]));
+  assert.equal(calls[0].opts.headers.Authorization, 'Bearer TEST-GROQ-KEY');
+  assert.ok(!JSON.stringify(calls[0]).includes(KEY), 'the Google key is never sent to Groq');
+  const body = JSON.parse(calls[0].opts.payload);
+  assert.equal(body.model, 'openai/gpt-oss-120b');
+  assert.equal(body.reasoning_effort, 'low');
+  assert.equal(body.response_format.json_schema.strict, true);
+  assert.deepEqual(body.response_format.json_schema.schema, {
+    type: 'object', properties: { choice: { type: 'integer' }, reason: { type: 'string' } },
+    required: ['choice', 'reason'], additionalProperties: false });
+});
+
+test('questions on Groq: the query reply shape is converted to strict JSON Schema, and checked', () => {
+  const { post, calls } = setup({ props: { AI_MODELS: GROQ, GROQ_API_KEY: 'g' },
+    geminiReply: [200, { status: 'query', reason: 'Owls seen', table: 'species', region: '', filters: [{ field: 'family', op: 'contains', value: 'owl' }], sortField: '', sortDir: 'desc', limit: 0 }] });
+  const r = post(JSON.stringify({ action: 'query', question: 'Which owls have I seen?' }));
+  assert.equal(r.status, 'query');
+  assert.equal(r.model, GROQ);
+  const schema = JSON.parse(calls[0].opts.payload).response_format.json_schema.schema;
+  assert.equal(schema.properties.filters.items.additionalProperties, false);
+  assert.deepEqual(schema.properties.filters.items.required, ['field', 'op', 'value']);
+  assert.equal(schema.propertyOrdering, undefined);
+});
+
+test('if Groq fails for any reason, the next company\'s model answers (even a bad Groq key)', () => {
+  const { post, calls } = setup({ props: { AI_MODELS: GROQ + ', gemini-3-flash-preview', GROQ_API_KEY: 'bad' },
+    geminiReplies: [[401, { error: { message: 'Invalid API Key' } }], [200, { choice: 1, reason: 'Carrion Crow' }]] });
+  const r = post(request());
+  assert.deepEqual([r.model, r.backup], ['gemini-3-flash-preview', true]);
+  assert.deepEqual(calls.map(viaGroq), [true, false]);
+});
+
+test('a Groq model with no GROQ_API_KEY is skipped, and Lyrebird runs on a Groq key alone', () => {
+  const noGroqKey = setup({ props: { AI_MODELS: GROQ + ', gemini-3-flash-preview' } });
+  assert.equal(noGroqKey.post(request()).model, 'gemini-3-flash-preview');
+  assert.equal(noGroqKey.calls.length, 1);                        // nothing sent to Groq without a key
+  const groqOnly = setup({ props: { GEMINI_API_KEY: '', AI_MODELS: GROQ, GROQ_API_KEY: 'g' } });
+  assert.equal(groqOnly.post(request()).status, 'pick');
 });

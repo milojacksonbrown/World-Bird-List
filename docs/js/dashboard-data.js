@@ -114,6 +114,60 @@ function activityByDate_(rows, index) {
   return out;
 }
 
+/**
+ * How often each species was recorded, and the firsts in each country, for
+ * "Ask your list". One pass over the eBird rows, matching names exactly as
+ * the lifer list does (resolveEbirdName_), and ordering by date and time as
+ * summariseEbird_ does, so the "first" here agrees with the lifer list.
+ * @return {{species: Object<number,{checklists:number, firstCountry:string}>,
+ *           countries: Object<string,{firstVisit:Date, firstSpecies:number, lifers:number, firstLifer:?number, firstLiferDate:?Date}>}}
+ *   Keyed by species number and two-letter country code. (Counts of individual
+ *   birds aren't used: most records are eBird's "X", seen but not counted.)
+ */
+function speciesStats_(rows, index) {
+  const out = { species: {}, countries: {} };
+  if (!rows || rows.length < 2) return out;
+  const H = rows[0].map(h => String(h).trim().toLowerCase());
+  const col = {
+    sci: H.indexOf('scientific name'), common: H.indexOf('common name'), date: H.indexOf('date'),
+    time: H.indexOf('time'), state: H.indexOf('state/province'), sub: H.indexOf('submission id'),
+  };
+  if (col.sci < 0) return out;
+  const subs = {}, firstOf = {};       // species -> Set of checklists; species -> earliest {key, date, cc}
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const sci = String(r[col.sci] || '').trim();
+    if (!sci) continue;
+    const res = resolveEbirdName_(sci, col.common >= 0 ? String(r[col.common] || '').trim() : '', index);
+    if (res.skip || res.target === undefined || res.target === null) continue;
+    const t = res.target;
+    const st = out.species[t] || (out.species[t] = { checklists: 0, firstCountry: '' });
+    const sub = col.sub >= 0 ? String(r[col.sub] || '').trim() : '';
+    (subs[t] = subs[t] || new Set()).add(sub || 'row' + i);
+    const date = col.date >= 0 ? parseEbirdDate_(r[col.date]) : null;
+    if (!date) continue;
+    const key = date.getTime() + parseEbirdTime_(col.time >= 0 ? r[col.time] : '') * 60000;
+    const cc = String(col.state >= 0 ? r[col.state] : '').trim().toUpperCase().split('-')[0];
+    if (!firstOf[t] || key < firstOf[t].key) firstOf[t] = { key, date, cc };
+    if (/^[A-Z]{2}$/.test(cc)) {
+      const c = out.countries[cc] || (out.countries[cc] = { key: Infinity, firstVisit: null, firstSpecies: null, lifers: 0, firstLifer: null, firstLiferDate: null, liferKey: Infinity });
+      if (key < c.key) { c.key = key; c.firstVisit = date; c.firstSpecies = t; }
+    }
+  }
+  Object.keys(out.species).forEach(t => {
+    out.species[t].checklists = subs[t].size;
+    const f = firstOf[t];
+    if (!f) return;
+    out.species[t].firstCountry = /^[A-Z]{2}$/.test(f.cc) ? f.cc : '';
+    const c = out.countries[f.cc];                   // the lifer was gained in this country
+    if (!c) return;
+    c.lifers++;
+    if (f.key < c.liferKey) { c.liferKey = f.key; c.firstLifer = Number(t); c.firstLiferDate = f.date; }
+  });
+  Object.values(out.countries).forEach(c => { delete c.key; delete c.liferKey; });
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 //  Name Fixes on the website (uses NameFixesAssistant.js, loaded before this)
 // ---------------------------------------------------------------------------
@@ -219,6 +273,7 @@ function buildDashboard_(rows, checklist, fixes) {
   });
 
   const activity = activityByDate_(rows, index);
+  const stats = speciesStats_(rows, index);          // for "Ask your list"
 
   const regions = checklist.regions.filter(r => r !== 'Worldwide').map(r => {
     const total = living.filter(s => inRegion_(s, r)).length;
@@ -249,6 +304,8 @@ function buildDashboard_(rows, checklist, fixes) {
     unmatched: [...ebird.unmatched.values()].sort((a, b) => b.n - a.n),
     countries: [...places.countries.values()].map(c => ({ code: c.code, species: c.species.size }))
       .sort((a, b) => b.species - a.species),
+    // For "Ask your list": checklist counts per species, and firsts per country
+    stats,
     // For "Ask your list": the countries each species was recorded in (species number -> codes)
     speciesCountries: [...places.countries.values()].reduce((m, c) => {
       c.species.forEach(i => { (m[i] = m[i] || []).push(c.code); });
@@ -292,6 +349,8 @@ function askData_(d, checklist, countries) {
   const C = countries || { byCode: {}, names: {} };
   const countryName = code => (C.byCode[code] && C.byCode[code].name) || code;
   const firsts = new Map(d.lifers.map(l => [l.i, l]));
+  const st = (d.stats && d.stats.species) || {}, cst = (d.stats && d.stats.countries) || {};
+  const nameOf = i => (i === null || i === undefined) ? null : checklist.species[i].common || checklist.species[i].sci;
   const species = checklist.species.map(s => {
     const l = firsts.get(s.i);
     return {
@@ -302,6 +361,8 @@ function askData_(d, checklist, countries) {
       firstYear: l && l.date ? l.date.getFullYear() : null,
       firstMonth: l && l.date ? l.date.getMonth() + 1 : null,
       firstPlace: l ? l.place : null,
+      firstCountry: st[s.i] && st[s.i].firstCountry ? countryName(st[s.i].firstCountry) : null,
+      checklists: st[s.i] ? st[s.i].checklists : 0,
       countries: (d.speciesCountries[s.i] || []).map(countryName),
       // "Worldwide" species count towards every land region, as on the region bars
       regions: checklist.regions.filter(r => r !== 'Worldwide' && inRegion_(s, r)),
@@ -316,7 +377,14 @@ function askData_(d, checklist, countries) {
   }));
   return {
     species,
-    countries: d.countries.map(c => ({ country: countryName(c.code), region: (C.byCode[c.code] && C.byCode[c.code].region) || '', species: c.species })),
+    countries: d.countries.map(c => {
+      const f = cst[c.code] || {};
+      return {
+        country: countryName(c.code), region: (C.byCode[c.code] && C.byCode[c.code].region) || '', species: c.species,
+        firstVisit: isoDay_(f.firstVisit), firstSpecies: nameOf(f.firstSpecies),
+        lifers: f.lifers || 0, firstLifer: nameOf(f.firstLifer), firstLiferDate: isoDay_(f.firstLiferDate),
+      };
+    }),
     years,
     months,
     countryNames: C.names,

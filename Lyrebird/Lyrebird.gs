@@ -16,7 +16,8 @@
  *    - Lyrebird.gs (this file)
  *    - NameFixesAssistant.gs (shared: the name-fix prompt, the Gemini call, the checks)
  *    - AskYourList.gs (shared: the question prompt and the query checker)
- *  and the GEMINI_API_KEY in Project Settings ▸ Script Properties.
+ *  and the GEMINI_API_KEY in Project Settings ▸ Script Properties (plus GROQ_API_KEY
+ *  if a Groq model is used).
  *
  *  It does two jobs ("actions"):
  *    - nameFix: pick the AviList species an unmatched eBird name belongs to
@@ -33,14 +34,15 @@
  *    - Nothing is stored except today's count.
  *
  *  Models: Gemini 3 Flash first; if it's out of free quota or busy, the
- *  backup Gemma 4 model answers instead (askGemini_ in NameFixesAssistant.gs).
+ *  backup Gemma 4 model answers instead. Script Property AI_MODELS can set
+ *  another order, including Groq models (askAi_ in NameFixesAssistant.gs).
  *  A request counts once towards the daily cap, whichever model answers.
  */
 
 const LYREBIRD = {
   // Shown when the web address is opened, so you can tell which code is live.
   // Change it whenever you publish a new version.
-  VERSION: '2026-11-12 (session 4d)',
+  VERSION: '2026-11-12 (session 4f)',
   DAILY_CAP: 200,          // Gemini calls per day, for everyone together
   MAX_TEXT: 120,           // longest name accepted, in characters
   MAX_SHORTLIST: 20,       // most candidates accepted
@@ -76,24 +78,25 @@ function doPost(e) {
   const req = checkRequest_(body);
   if (req.problem) return json_({ ok: false, error: 'bad-request', message: req.problem });
 
-  const key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  if (!key) return json_({ ok: false, error: 'not-configured', message: 'The AI is not set up yet.' });
+  const props = PropertiesService.getScriptProperties();
+  const key = props.getProperty('GEMINI_API_KEY') || '';
+  if (!key && !props.getProperty('GROQ_API_KEY')) return json_({ ok: false, error: 'not-configured', message: 'The AI is not set up yet.' });
   if (!takeFromDailyAllowance_()) {
     return json_({ ok: false, error: 'limit', message: 'The AI limit for today has been reached. Please try again tomorrow.' });
   }
 
   try {
     // Both jobs say which model answered: the main one, or the backup (Gemma)
-    // if the main one was out of quota or busy. See askGemini_.
+    // if the main one was out of quota or busy. See askAi_.
     if (req.action === 'query') {
-      const ai = askGemini_(buildQueryPrompt_(req.question, new Date()), key, queryResponseSchema_());
+      const ai = askAi_(buildQueryPrompt_(req.question, new Date()), key, queryResponseSchema_());
       const ans = readQueryAnswer_(ai.text);
       return json_(ans.status === 'query'
         ? { ok: true, status: 'query', query: ans.query, reason: ans.reason, model: ai.model, backup: ai.backup }
         : { ok: true, status: ans.status, reason: ans.reason, model: ai.model, backup: ai.backup });
     }
     // nameFix
-    const ai = askGemini_(buildAiPrompt_(req.ebird, req.shortlist), key);
+    const ai = askAi_(buildAiPrompt_(req.ebird, req.shortlist), key);
     const ans = parseAiAnswer_(ai.text, req.shortlist);
     // The candidate's number (1 = first). Worked out here too, so an older copy of
     // NameFixesAssistant.gs (whose answers don't include it) still gives the right number.

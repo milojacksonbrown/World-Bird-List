@@ -64,12 +64,12 @@ const col = (res, field) => res.rows.map(r => r[res.columns.findIndex(c => c.fie
 test('a valid query passes, with values converted to the right types and defaults filled in', () => {
   const c = check({ table: 'families', filters: [{ field: 'pctSeen', op: 'lt', value: '10%' }] });
   assert.equal(c.problem, '');
-  assert.deepEqual(c.query, { table: 'families', region: '', filters: [{ field: 'pctSeen', op: 'lt', value: 10 }], sortField: 'seen', sortDir: 'desc', limit: 25 });
+  assert.deepEqual(c.query, { table: 'families', region: '', filters: [{ field: 'pctSeen', op: 'lt', value: 10 }], sortField: 'seen', sortDir: 'desc', limit: 25, columns: [] });
 });
 
 test('Gemini\'s "nothing" values (empty region and sort, no filters, limit 0) mean the defaults', () => {
   const c = check({ status: 'query', reason: '', table: 'years', region: '', filters: [], sortField: '', sortDir: 'desc', limit: 0 });
-  assert.deepEqual(c.query, { table: 'years', region: '', filters: [], sortField: 'year', sortDir: 'asc', limit: 25 });
+  assert.deepEqual(c.query, { table: 'years', region: '', filters: [], sortField: 'year', sortDir: 'asc', limit: 25, columns: [] });
 });
 
 test('the checker accepts its own output, so the browser can check Lyrebird\'s reply again', () => {
@@ -201,7 +201,7 @@ test('countries can be named by another name ("UK"), and species filtered by cou
   const notSpain = ask({ table: 'species', filters: [{ field: 'seen', op: 'eq', value: 'true' }, { field: 'countries', op: 'lacks', value: 'spain' }] });
   assert.deepEqual(col(notSpain, 'common'), []);
   const c = ask({ table: 'countries', filters: [{ field: 'country', op: 'eq', value: 'Britain' }] });
-  assert.deepEqual(c.rows, [['United Kingdom', 'Europe', 1]]);
+  assert.deepEqual(c.rows, [['United Kingdom', 'Europe', 1, 1]]);
 });
 
 test('threatened species, text "contains", and the limit', () => {
@@ -220,4 +220,43 @@ test('years and months: the best year for lifers, and a season', () => {
   assert.deepEqual(july.rows, [['July', 2, 3, 3]]);
   const firstYear = ask({ table: 'species', filters: [{ field: 'firstYear', op: 'eq', value: '2022' }] });
   assert.deepEqual(col(firstYear, 'common'), ['Grey Heron']);
+});
+
+// ---------- how often, and firsts in each country ----------
+
+test('"which bird have I seen the most": species by number of checklists', () => {
+  const r = ask({ table: 'species', filters: [{ field: 'seen', op: 'eq', value: 'true' }], sortField: 'checklists', sortDir: 'desc', limit: 2 });
+  assert.deepEqual(r.rows.map(x => [x[0], x[r.columns.findIndex(c => c.field === 'checklists')]]), [['Grey Heron', 3], ['Osprey', 1]]);
+  const never = ask({ table: 'species', filters: [{ field: 'common', op: 'eq', value: 'Great Egret' }], columns: ['checklists'] });
+  assert.equal(col(never, 'checklists')[0], 0);
+});
+
+test('"first lifer in each country": firsts per country, and lifers add up to the whole list', () => {
+  const r = ask({ table: 'countries', sortField: 'firstVisit', sortDir: 'asc', columns: ['firstLifer', 'firstLiferDate', 'firstSpecies'] });
+  assert.deepEqual(r.columns.map(c => c.field), ['country', 'region', 'species', 'lifers', 'firstLifer', 'firstLiferDate', 'firstSpecies', 'firstVisit']);
+  assert.deepEqual(r.rows, [
+    ['United Kingdom', 'Europe', 1, 1, 'Grey Heron', '2022-03-10', 'Grey Heron', '2022-03-10'],
+    ['Spain', 'Europe', 3, 2, 'Osprey', '2024-07-02', 'Osprey', '2024-07-02'],
+  ]);
+  assert.equal(col(r, 'lifers').reduce((a, b) => a + b, 0), 3);     // every lifer is counted in exactly one country
+});
+
+test('the first bird recorded in a country can differ from the first lifer there', () => {
+  // A Grey Heron seen first in Spain on a later trip: already a lifer from the UK
+  ctx.ROWS2 = ROWS.concat([row('S8', 'Gray Heron', 'Ardea cinerea', 'FR-IDF', 'Paris', '2025-01-01'),
+    row('S9', 'Osprey', 'Pandion haliaetus', 'FR-IDF', 'Paris', '2025-01-02'),
+    row('S9', 'Great Egret', 'Ardea alba', 'FR-IDF', 'Paris', '2025-01-02')]);
+  run('var ASK2 = askData_(buildDashboard_(ROWS2, CL), CL, loadCountries_(COUNTRIES));');
+  const fr = plain(run('ASK2.countries')).find(c => c.country === 'FR');   // no name in the test list: shown as its code
+  assert.deepEqual([fr.firstSpecies, fr.firstLifer, fr.lifers], ['Grey Heron', 'Great Egret', 1]);
+  assert.equal(plain(run('ASK2.species')).find(s => s.common === 'Great Egret').firstCountry, 'FR');
+});
+
+test('columns: only fields of the table, at most six, shown in the description', () => {
+  assert.match(check({ table: 'countries', columns: ['firstLifer', 'password'] }).problem, /no field "password" to show/);
+  assert.match(check({ table: 'countries', columns: 'firstLifer' }).problem, /must be a list/);
+  assert.match(check({ table: 'species', columns: ['common', 'scientific', 'family', 'order', 'iucn', 'checklists', 'seen'] }).problem, /Too many columns/);
+  assert.deepEqual(check({ table: 'countries', columns: ['firstLifer', 'firstLifer'] }).query.columns, ['firstLifer']);
+  ctx.Q = check({ table: 'countries', columns: ['firstLifer', 'firstLiferDate'] }).query;
+  assert.equal(run('describeQuery_(Q)'), 'Countries, species highest first, up to 25, showing first lifer and first lifer date.');
 });
