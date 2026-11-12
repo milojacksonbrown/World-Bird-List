@@ -68,11 +68,14 @@ const QUESTIONS = [
 // and one that hits that limit is tried again after a longer wait.
 const PAUSE_MS = 8000, RETRY_MS = 45000;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Temporary problems worth waiting for: the free-tier limit (429) or high demand (503)
+// and dropped connections ("fetch failed")
+const BUSY = /limit reached|error 5\d\d|high demand|try again later|fetch failed|HTTP 5\d\d/i;
 
 async function askLyrebird(question, retried) {
-  const reply = await askOnce(question);
-  if (!retried && !reply.ok && /limit reached, try again later/.test(reply.message || '')) {
-    console.log('    (Gemini\'s per-minute limit: waiting ' + RETRY_MS / 1000 + ' s and trying again)');
+  const reply = await askOnce(question).catch(e => ({ ok: false, message: e.message }));
+  if (!retried && !reply.ok && BUSY.test(reply.message || '')) {
+    console.log('    (Gemini is busy or at its per-minute limit: waiting ' + RETRY_MS / 1000 + ' s and trying again)');
     await sleep(RETRY_MS);
     return askLyrebird(question, true);
   }
@@ -101,6 +104,10 @@ async function main() {
       reply = await askLyrebird(question);
     } catch (e) {
       reply = { ok: false, message: e.message };
+    }
+    if (!reply.ok && !BUSY.test(reply.message || '')) {
+      // Not a busy moment but a set-up problem (e.g. an unknown model): every question would fail the same way
+      throw new Error('Stopped: ' + reply.message + '\nNothing was saved; fix Lyrebird\'s set-up and run again.');
     }
     if (!reply.ok) { understood = 'Error: ' + reply.message; ok = false; }
     else if (reply.status !== 'query') { understood = reply.status + ': ' + reply.reason; ok = check === 'cannot' && reply.status === 'cannot'; }
