@@ -2,7 +2,7 @@
 
 A bird-watching life list that matches your [eBird](https://ebird.org) sightings to [AviList](https://www.avilist.org/), the new global checklist of the world's birds, with two AI features built so that the AI can't get things quietly wrong.
 
-**[Try the dashboard →](https://milojacksonbrown.github.io/World-Bird-List/)** <!-- TODO session 5: live once GitHub Pages is on -->
+**[Try the dashboard →](https://milojacksonbrown.github.io/World-Bird-List/)**
 Upload your own eBird data, or press *Try with sample data* to see mine.
 
 It comes in two forms that share the same code:
