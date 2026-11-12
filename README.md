@@ -13,7 +13,7 @@ It comes in two forms that share the same code:
 | Data | Kept in my Google Drive, updated daily | Read in the visitor's browser, never uploaded |
 | AI | Name Fixes assistant | Name Fixes, plus *Ask your list* |
 
-![Screenshot of the dashboard](docs/screenshot.png) <!-- TODO session 5: add a screenshot -->
+![The Life List dashboard: field-guide styling with a dashed expedition route, upload and sample-data buttons, and headline counts of 640 species, 108 families, 26 orders and 9 countries](docs/screenshot.png)
 
 ---
 
@@ -113,7 +113,7 @@ That's why Lyrebird falls back to a second model, and why the site keeps working
 - The AI is sent only bird names (Name Fixes) or your question (Ask your list).
 - Accepted name fixes are saved in your own browser only.
 - Free AI services may keep or use what's sent (Google says so for Gemini's free tier), so nothing personal is sent.
-- The sample data on the site is my own list, with comments, counts and observer details removed.
+- The sample data on the site is my own list, with comments, counts and observer details removed, dropped-pin addresses blurred to suburb level (about 1 km), and checklist IDs replaced, since eBird checklists are public and show exact locations. The repo's history was rewritten before publishing, so the exact addresses were never public.
 
 ## How I built this
 
