@@ -33,7 +33,7 @@ const ASK = {
   MAX_VALUE: 100,          // longest filter value, in characters
   DEFAULT_LIMIT: 25,       // rows shown when the question doesn't say
   MAX_LIMIT: 200,
-  // The regions a question can be limited to (AviList's breeding regions)
+  // The regions a question can be limited to (AviList regions: where a species breeds, winters or passes through)
   REGIONS: ['Europe', 'Asia', 'Africa', 'N America', 'Middle America', 'S America', 'Australasia', 'Pacific Is.', 'Antarctic', 'Oceans'],
 };
 
@@ -69,7 +69,7 @@ const ASK_TABLES_ = {
       firstMonth: ['number', 'Month first seen', 'month of my first sighting, 1 = January'],
       firstPlace: ['text', 'Where first seen', 'eBird location of my first sighting'],
       countries: ['list', 'Countries', 'countries where I have recorded it, e.g. "Kenya"'],
-      regions: ['list', 'Regions', 'AviList regions where it breeds'],
+      regions: ['list', 'Regions', 'AviList regions where it breeds, winters or passes through'],
     },
     show: ['common', 'scientific', 'family', 'firstSeen', 'firstPlace'],
     sort: ['firstSeen', 'desc'],
@@ -378,7 +378,7 @@ function describeFilter_(table, f) {
 function describeQuery_(q) {
   const T = ASK_TABLES_[q.table];
   let s = T.noun[1].charAt(0).toUpperCase() + T.noun[1].slice(1);
-  if (q.region) s += q.table === 'species' ? ' that breed in ' + q.region : ' (' + q.region + ' species only)';
+  if (q.region) s += q.table === 'species' ? ' found in ' + q.region : ' (' + q.region + ' species only)';
   // "where % seen is under 10% and seen is over 0": "where" only once
   if (q.filters.length) s += ' ' + q.filters.map((f, i) => describeFilter_(q.table, f).replace(i ? /^where / : /^$/, '')).join(' and ');
   const [type, label] = T.fields[q.sortField];

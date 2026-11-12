@@ -73,7 +73,7 @@ test('the lifer date is the earliest sighting, and lifers are listed newest firs
 test('region progress: Worldwide species count in land regions only, extinct species never', () => {
   const d = build();
   const r = name => d.regions.find(x => x.name === name);
-  assert.deepEqual([r('Europe').seen, r('Europe').total], [3, 6]);   // all but the Dodo breed in Europe (osprey via Worldwide)
+  assert.deepEqual([r('Europe').seen, r('Europe').total], [3, 6]);   // all but the Dodo are found in Europe (osprey via Worldwide)
   assert.deepEqual([r('Africa').seen, r('Africa').total], [2, 3]);   // heron, osprey / heron, egret, osprey
   assert.deepEqual([r('Oceans').seen, r('Oceans').total], [0, 0]);   // Worldwide doesn't count at sea
 });
@@ -192,4 +192,18 @@ test('filterLifers_ searches common name, scientific name and family, ignoring c
   assert.deepEqual(f('herons'), ['Grey Heron']);                    // by family
   assert.equal(f('').length, 3);                                    // empty search: everything
   assert.equal(f('albatross').length, 0);
+});
+
+test('region totals count birds that winter in or pass through a region, not only breeders', () => {
+  const r = d => name => d.regions.find(x => x.name === name);
+  const before = r(build())('Africa').total;
+  // Same checklist, but one record says where the bird is found outside the breeding season
+  const withVisits = JSON.parse(JSON.stringify(DATA));
+  withVisits.fields = DATA.fields.concat(['ssp', 'visits']);
+  withVisits.species = DATA.species.map(s => s.concat(['', 0]));
+  withVisits.species[2][9] = bit('Africa');           // Carrion Crow: made-up winter visitor to Africa
+  ctx.WV = withVisits;
+  const after = run('buildDashboard_(ROWS, loadChecklist_(WV))');
+  assert.equal(r(after)('Africa').total, before + 1);
+  assert.equal(r(after)('Europe').total, r(build())('Europe').total);   // already breeds there: no double count
 });

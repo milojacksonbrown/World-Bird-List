@@ -245,3 +245,52 @@ test('no file in the repo contains something that looks like a Google API key', 
     .filter(f => /\.(gs|js|json|md)$/.test(f));
   files.forEach(f => assert.doesNotMatch(fs.readFileSync(f, 'utf8'), /AIza[0-9A-Za-z_-]{30,}/, f));
 });
+
+// ---------- AviList's own answer: the eBird bird is an AviList subspecies ----------
+
+// Species with their subspecies names (the `ssp` field), as on the website
+const WITH_SSP = [
+  { row: 0, sci: 'Corvus corone', common: 'Carrion Crow', alt: '', ssp: 'corone;cornix;sharpii;pallescens' },
+  { row: 1, sci: 'Corvus corax', common: 'Northern Raven', alt: '', ssp: 'corax;varius;tingitanus' },
+  { row: 2, sci: 'Porphyrio porphyrio', common: 'Purple Swamphen', alt: '', ssp: 'porphyrio;madagascariensis;melanotus;poliocephalus' },
+  { row: 3, sci: 'Porphyrio albus', common: 'White Swamphen', alt: '', ssp: '' },
+  // Two Aus species sharing a subspecies name: no single answer
+  { row: 4, sci: 'Aus alpha', common: 'Alpha Bird', alt: '', ssp: 'alpha;orientalis' },
+  { row: 5, sci: 'Aus beta', common: 'Beta Bird', alt: '', ssp: 'beta;orientalis' },
+];
+const sspMatch = (sci, common) => { ctx.E = { sci, common }; ctx.SSP_SPECIES = WITH_SSP; return run('subspeciesMatch_(E, SSP_SPECIES)'); };
+
+test('an eBird species that AviList lists as a subspecies is matched to its parent species', () => {
+  assert.equal(sspMatch('Corvus cornix', 'Hooded Crow').sci, 'Corvus corone');
+  assert.equal(sspMatch('Corvus cornix', 'Hooded Crow').ssp, 'Corvus corone cornix');
+  assert.equal(sspMatch('Porphyrio melanotus', 'Australasian Swamphen').sci, 'Porphyrio porphyrio');
+  assert.equal(sspMatch('Corvus corone cornix', '').sci, 'Corvus corone');     // eBird subspecies form too
+});
+
+test('no subspecies answer when there is none, or more than one, or the genus differs', () => {
+  assert.equal(sspMatch('Corvus splendens', 'House Crow'), null);
+  assert.equal(sspMatch('Aus orientalis', 'Eastern Bird'), null);              // in two species: ambiguous
+  assert.equal(sspMatch('Pica cornix', 'Made-up Magpie'), null);              // right name, wrong genus
+  assert.equal(sspMatch('Corvus', ''), null);
+});
+
+test('a subspecies answer is a High suggestion with no AI call, on the shortlist', () => {
+  ctx.E = { sci: 'Corvus cornix', common: 'Hooded Crow' }; ctx.SSP_SPECIES = WITH_SSP;
+  const prep = run('prepareSuggestion_(E, SSP_SPECIES)');
+  assert.equal(prep.final.sci, 'Corvus corone');
+  assert.equal(prep.final.confidence, 'High');
+  assert.match(prep.final.reason, /AviList lists it as a subspecies: Corvus corone cornix, part of Carrion Crow/);
+  assert.ok(prep.shortlist.some(c => c.sci === 'Corvus corone'));
+  // suggestFor_ never asks the AI for it
+  let asked = false;
+  ctx.ASK = () => { asked = true; return '{"choice":2,"reason":"x"}'; };
+  assert.equal(run('suggestFor_(E, SSP_SPECIES, ASK)').sci, 'Corvus corone');
+  assert.equal(asked, false);
+});
+
+test('species records without subspecies names (the spreadsheet) behave as before', () => {
+  ctx.E = { sci: 'Corvus cornix', common: 'Hooded Crow' };
+  ctx.SSP_SPECIES = WITH_SSP.map(({ ssp, ...rest }) => rest);
+  assert.equal(run('subspeciesMatch_(E, SSP_SPECIES)'), null);
+  assert.equal(run('prepareSuggestion_(E, SSP_SPECIES)').final, null);
+});

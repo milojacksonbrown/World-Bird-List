@@ -23,8 +23,9 @@ function loadChecklist_(data) {
     return {
       i, sci: r[F.sci], common: r[F.common], alt: r[F.alt],
       family: fam[0], familyEn: fam[1], order: data.orders[fam[2]],
-      iucn: r[F.iucn], code: r[F.code], extinct: !!r[F.extinct],
-      regions: data.regions.filter((_, b) => r[F.regions] & (1 << b)),
+      iucn: r[F.iucn], code: r[F.code], extinct: !!r[F.extinct], ssp: F.ssp === undefined ? '' : r[F.ssp] || '',
+      regions: data.regions.filter((_, b) => r[F.regions] & (1 << b)),                          // breeds in
+      visits: F.visits === undefined ? [] : data.regions.filter((_, b) => r[F.visits] & (1 << b)),  // winters in or passes through
     };
   });
   // Same index as applyEbird_ in LifeList.gs: scientific name, then common and other names
@@ -119,7 +120,7 @@ function activityByDate_(rows, index) {
 
 /** AviList species in the shape the string-matching functions expect. */
 function speciesForMatching_(checklist) {
-  return checklist.species.map(s => ({ row: s.i, sci: s.sci, common: s.common, alt: s.alt }));
+  return checklist.species.map(s => ({ row: s.i, sci: s.sci, common: s.common, alt: s.alt, ssp: s.ssp }));
 }
 
 /**
@@ -175,9 +176,14 @@ function filterLifers_(lifers, text) {
   return lifers.filter(l => [l.common, l.sci, l.family].some(f => tidy(f).includes(q)));
 }
 
-/** Does this species count towards this region? */
+/**
+ * Does this species count towards this region? Yes if it breeds there or
+ * regularly visits (winters or passes through on migration), as AviList's
+ * range text describes. Vagrants aren't counted: the range text rarely lists them.
+ */
 function inRegion_(s, region) {
-  return s.regions.includes(region) || (s.regions.includes('Worldwide') && LAND_REGIONS_.includes(region));
+  const has = r => s.regions.includes(r) || (s.visits || []).includes(r);
+  return has(region) || (has('Worldwide') && LAND_REGIONS_.includes(region));
 }
 
 /**

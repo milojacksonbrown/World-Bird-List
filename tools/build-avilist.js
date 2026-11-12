@@ -37,7 +37,7 @@ const families = [], familyIdx = new Map();
 const rows = species.map(s => {
   if (!orderIdx.has(s.order)) { orderIdx.set(s.order, orders.length); orders.push(s.order); }
   if (!familyIdx.has(s.family)) { familyIdx.set(s.family, families.length); families.push([s.family, s.familyEn, orderIdx.get(s.order)]); }
-  return [s.sci, s.common, s.alt, familyIdx.get(s.family), s.iucn, s.code, regionBits(s.regionSet), s.extinct ? 1 : 0];
+  return [s.sci, s.common, s.alt, familyIdx.get(s.family), s.iucn, s.code, regionBits(s.regionSet), s.extinct ? 1 : 0, s.ssp.join(';'), regionBits(s.visitSet)];
 });
 
 const year = version.replace(/\D/g, '');
@@ -46,11 +46,11 @@ const out = {
   source: 'https://www.avilist.org/checklist/' + version + '/',
   citation: 'AviList Core Team. ' + year + '. AviList: The Global Avian Checklist, ' + version + '. https://doi.org/10.2173/avilist.' + version,
   licence: 'AviList: The Global Avian Checklist © ' + year + ' by AviList Core Team is licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)',
-  changes: 'Converted from the Extended .xlsx to this compact file: species rows only, selected columns, breeding regions summarised from the range text.',
+  changes: 'Converted from the Extended .xlsx to this compact file: species rows only (with the names of their subspecies), selected columns, breeding and non-breeding regions summarised from the range text (vagrants not included).',
   regions: REGIONS,
   orders,
   families,                                                     // [scientific, English, order index]
-  fields: ['sci', 'common', 'alt', 'family', 'iucn', 'code', 'regions', 'extinct'],
+  fields: ['sci', 'common', 'alt', 'family', 'iucn', 'code', 'regions', 'extinct', 'ssp', 'visits'],   // regions: breeds in; ssp: subspecies names, ';'-separated; visits: found in outside the breeding season
   species: rows,
 };
 

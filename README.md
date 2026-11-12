@@ -39,12 +39,15 @@ Both features follow one rule: **the AI proposes, ordinary code verifies.** The 
 ### 1. Name Fixes assistant
 
 1. **String matching first, no AI.** The unmatched name is compared with all 11,000 AviList names, ignoring case, accents, hyphens and spelling variants (Grey/Gray). Near-identical matches are settled here, for free.
-2. **A shortlist.** The 10 most similar names, plus 5 species from the same genus.
-3. **Gemini picks from the shortlist, or says "none".** It sees only bird names. Any answer that isn't a shortlist number is rejected.
-4. **Confidence comes from agreement, not from the AI.** It's *High* when string matching and the AI agree, *Medium* when only one method finds a match, and *Low* when they disagree. AI models are poor judges of their own certainty, so I don't ask the AI how sure it is.
-5. **Nothing changes until I accept.** I can also pick any other candidate, or search AviList myself.
+2. **AviList's own answer, no AI.** Many names eBird treats as a species but AviList doesn't are listed in AviList as a *subspecies*. eBird's Hooded Crow (*Corvus cornix*) is AviList's *Corvus corone **cornix***, part of Carrion Crow. If exactly one species in the genus has a subspecies of that name, that's the answer, with High confidence and the reason shown. This solved every unmatched name in my own eBird data, instantly.
+3. **A shortlist** (only if there's still no answer). The 10 most similar names, plus 5 species from the same genus.
+4. **Gemini picks from the shortlist, or says "none".** It sees only bird names. Any answer that isn't a shortlist number is rejected.
+5. **Confidence comes from agreement, not from the AI.** It's *High* when string matching and the AI agree, *Medium* when only one method finds a match, and *Low* when they disagree. AI models are poor judges of their own certainty, so I don't ask the AI how sure it is.
+6. **Nothing changes until I accept.** I can also pick any other candidate, or search AviList myself.
 
-Example: for *Hooded Crow (Corvus cornix)*, string matching guesses Common Raven (same genus, similar letters). Gemini picks Carrion Crow, which is right, because AviList treats Hooded Crow as part of it. The two disagree, so the suggestion is marked **Low** confidence with the reason shown. The AI fixed string matching's mistake, and the confidence label still flags the case for a human to check.
+Example: for *Hooded Crow (Corvus cornix)*, string matching guesses Common Raven (same genus, similar letters). Before step 2 existed, Gemini picked Carrion Crow, which is right, but because the two methods disagreed the suggestion was only **Low** confidence. A smaller backup model got it wrong. Step 2 now finds the answer in AviList's own subspecies list: instant, free and certain.
+
+**Lesson: the best AI feature can be less AI.** The AI is now only used for the rare names that the data can't settle.
 
 ### 2. Ask your list
 

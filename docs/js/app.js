@@ -363,7 +363,7 @@
     const land = d.regions.filter(r => r.name !== 'Oceans');
     const sea = d.regions.find(r => r.name === 'Oceans');
     $('#region-bars').innerHTML = land.map(r => '<li>' + bar(r) + '</li>').join('') +
-      (sea ? '<li class="sea">' + bar(sea) + '<span class="note">Seabirds that breed at sea or on remote islands, so not shaded on the map.</span></li>' : '');
+      (sea ? '<li class="sea">' + bar(sea) + '<span class="note">Seabirds found at sea or on remote islands, so not shaded on the map.</span></li>' : '');
   }
 
   // ---------- Plate III: lifers per year and per month ----------
@@ -452,7 +452,7 @@
         layer.bindTooltip('<strong>' + esc(p.NAME) + '</strong><br>' +
           (n ? num(n) + ' species recorded here' : 'Not birded yet') +
           (r ? '<br><span class="tip-region">' + esc(region) + ': ' + num(r.seen) + ' of ' + num(r.total) +
-            ' breeding species seen (' + pct(r.pct) + ')</span>' : ''), { sticky: true });
+            ' regional species seen (' + pct(r.pct) + ')</span>' : ''), { sticky: true });
       },
     }).addTo(map);
     map.invalidateSize();

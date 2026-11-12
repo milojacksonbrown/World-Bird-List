@@ -13,6 +13,7 @@ For each unmatched name, suggest the most likely AviList species, say how confid
 ## How a suggestion is made
 
 1. **String matching (no AI).** Compare the unmatched eBird name with every AviList scientific and common name, ignoring case, accents, hyphens and common spelling variants (e.g. Grey/Gray). This catches typos and small spelling differences for free.
+1b. **AviList subspecies (added 12 Nov 2026, no AI).** If AviList lists the eBird name as a subspecies of exactly one species in the same genus (eBird *Corvus cornix* = AviList *Corvus corone cornix*), suggest that species with High confidence. Found by testing: this solved every unmatched name in my data, while a smaller AI model got them wrong. Website only for now: the spreadsheet's Species tab doesn't store subspecies names yet.
 2. **Shortlist.** For each unmatched name, the script builds a shortlist of about 10 AviList candidates: the most similar-looking names, plus the other species in the same genus.
 3. **AI check (Gemini API, free tier, Flash model).** The AI is sent the unmatched name and the shortlist only. It must pick one candidate from the shortlist or answer "none", and give a one-line reason. Any answer that isn't on the shortlist is rejected.
 

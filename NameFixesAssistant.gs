@@ -310,6 +310,27 @@ function parseAiAnswer_(text, shortlist) {
 }
 
 /**
+ * AviList's own answer, no AI needed: most names that eBird treats as a
+ * species but AviList doesn't are listed in AviList as a SUBSPECIES. eBird's
+ * Hooded Crow, "Corvus cornix", is AviList's "Corvus corone cornix", part of
+ * Carrion Crow. This finds the one species in the same genus with a
+ * subspecies of that name. Returns null if there's none, or more than one
+ * (the same subspecies name can be used in two species of a genus).
+ * Species records need an `ssp` field: subspecies names, ';'-separated.
+ * @return {{row:number, sci:string, common:string, ssp:string}|null}  ssp: the full subspecies name
+ */
+function subspeciesMatch_(ebird, species) {
+  const words = String((ebird && ebird.sci) || '').trim().toLowerCase().split(/\s+/);
+  if (words.length < 2) return null;
+  const genus = words[0], name = words[words.length - 1];
+  const hits = species.filter(s => s.ssp && String(s.sci).toLowerCase().split(' ')[0] === genus &&
+    String(s.ssp).toLowerCase().split(';').some(x => x.trim() === name));
+  if (hits.length !== 1) return null;
+  const s = hits[0];
+  return { row: s.row, sci: s.sci, common: s.common, ssp: s.sci + ' ' + name };
+}
+
+/**
  * The local part of a suggestion: string matching and the shortlist (no AI).
  * Stops early with the final suggestion when the names are identical once tidied.
  * Split from suggestFor_ so the website can do this part in the browser and the
@@ -328,6 +349,13 @@ function prepareSuggestion_(ebird, species) {
     const d = decideSuggestion_(str, null);
     d.reason += ' (AI check not needed)';
     return { str, shortlist, final: d };
+  }
+  // AviList lists the eBird bird as a subspecies: its own data gives the answer
+  const ssp = subspeciesMatch_(ebird, species);
+  if (ssp) {
+    if (!shortlist.some(c => c.row === ssp.row)) shortlist.unshift({ row: ssp.row, sci: ssp.sci, common: ssp.common, score: 0 });
+    return { str, shortlist, final: { sci: ssp.sci, confidence: 'High',
+      reason: 'AviList lists it as a subspecies: ' + ssp.ssp + (ssp.common ? ', part of ' + ssp.common : '') + ' (AI check not needed)' } };
   }
   return { str, shortlist, final: null };
 }
@@ -363,7 +391,7 @@ function suggestFor_(ebird, species, askAi) {
   const prep = prepareSuggestion_(ebird, species);
   const scoreMs = Date.now() - t0;
   if (prep.final) {
-    logTime_('Name Fixes: "' + label + '": scoring ' + scoreMs + ' ms, AI skipped (identical name)');
+    logTime_('Name Fixes: "' + label + '": scoring ' + scoreMs + ' ms, AI skipped (identical name or AviList subspecies)');
     return prep.final;
   }
   const t1 = Date.now();

@@ -121,6 +121,7 @@ The AI doesn't answer the question. It translates it into a small, structured qu
 | `docs/data/countries.json` | Country codes → name, other names ("UK") and AviList region, made from Natural Earth by `tools/build-countries.js`, so questions can name countries |
 
 - **Charts:** Chart.js from a public CDN, at a fixed version.
+- **Region totals (changed 12 Nov):** a species counts towards a region if AviList's range text says it breeds there *or* winters or passes through on migration. Vagrants aren't counted (AviList doesn't record them), so Europe is about 550, not the ~1,000 of a full European list. "Seen" counts species seen anywhere, so the bars show overall progress towards each region's birds.
 - **Map:** Leaflet with Natural Earth country outlines (public domain, pinned to release v5.1.2), as the spreadsheet's map already uses, with no tile background. Each country is also assigned to one AviList region (for the tooltips), following the range summariser's rules; countries spanning two regions (e.g. Russia, Egypt) go by continent.
 - **Hosting:** GitHub Pages, from the `docs/` folder. The repo must be public.
 

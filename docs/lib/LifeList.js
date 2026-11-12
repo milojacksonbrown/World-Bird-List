@@ -249,7 +249,8 @@ function summariseRange_(texts) {
     const extra = new Set([...nR].filter(r => !bR.has(r)));
     nonbreed = extra.size ? formatRegions_(extra) : 'Within breeding range';
   }
-  return { breed: formatRegions_(bR), breedSub: formatSubs_(bR, bS, bB), nonbreed, regionSet: bR };
+  // visitSet: regions it's found in outside the breeding season (wintering, on passage)
+  return { breed: formatRegions_(bR), breedSub: formatSubs_(bR, bS, bB), nonbreed, regionSet: bR, visitSet: nR };
 }
 
 // ---------------------------------------------------------------------------
@@ -325,16 +326,19 @@ function parseAviList_(values) {
         alt: [...new Set(alt)].join('; '),
         range: get(r, 'range'),
         sspRanges: [],
+        ssp: [],             // subspecies names (last word), e.g. Carrion Crow: corone, cornix…
         iucn: iucnRaw || (extinct ? 'EX' : (/possibly/i.test(ext) ? 'CR (PE)' : '')),
         extinct,
         code: get(r, 'code'),
       };
       species.push(cur);
     } else if (rank === 'subspecies' && cur) {
-      const sci = get(r, 'sci');
+      const sci = get(r, 'sci').replace(/\s+/g, ' ');
       const rg = get(r, 'range');
-      if (rg && sci.indexOf(cur.sci + ' ') === 0) {
-        cur.sspRanges.push({ name: sci.slice(cur.sci.length + 1), range: rg });
+      if (sci.indexOf(cur.sci + ' ') === 0) {
+        const name = sci.slice(cur.sci.length + 1);
+        cur.ssp.push(name);
+        if (rg) cur.sspRanges.push({ name, range: rg });
       }
     } else if (rank && rank !== 'subspecies') {
       cur = null;
@@ -344,7 +348,7 @@ function parseAviList_(values) {
     if (!s.familyEn) s.familyEn = familyNames.get(s.family) || '';
     const texts = s.range ? [s.range] : s.sspRanges.map(x => x.range);
     const sum = summariseRange_(texts);
-    s.breed = sum.breed; s.breedSub = sum.breedSub; s.nonbreed = sum.nonbreed; s.regionSet = sum.regionSet;
+    s.breed = sum.breed; s.breedSub = sum.breedSub; s.nonbreed = sum.nonbreed; s.regionSet = sum.regionSet; s.visitSet = sum.visitSet;
     let note = s.range ? s.range : s.sspRanges.map(x => x.name + ': ' + x.range).join('\n');
     if (note.length > 1800) note = note.slice(0, 1800) + ' …';
     s.note = note ? 'AviList range:\n' + note : '';
