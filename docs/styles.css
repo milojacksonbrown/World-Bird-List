@@ -2,7 +2,7 @@
    clean sans-serif for numbers and lists. Light mode only. */
 
 :root {
-  color-scheme: light;
+  color-scheme: only light;   /* "only": phone browsers that auto-darken sites (Chrome on Android, Samsung Internet) leave this one alone */
   --paper: #f4eee1;
   --paper-deep: #ebe2cf;
   --card: #fbf8f1;
