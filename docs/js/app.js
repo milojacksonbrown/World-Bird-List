@@ -98,7 +98,8 @@
   function liferItem(l) {
     return '<li><span class="date">' + esc(date(l.date)) + '</span>' +
       '<span><span class="name">' + esc(l.common) + '</span> <span class="sci">' + esc(l.sci) + '</span></span>' +
-      '<span class="where">' + (l.checklist
+      // Link only real eBird checklist IDs ("S123…"); the sample data's are made up
+      '<span class="where">' + (/^S\d+$/.test(l.checklist)
         ? '<a href="https://ebird.org/checklist/' + encodeURIComponent(l.checklist) + '">' + esc(l.place || 'eBird checklist') + '</a>'
         : esc(l.place)) + '</span></li>';
   }
