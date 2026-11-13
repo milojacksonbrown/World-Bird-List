@@ -479,7 +479,7 @@ function askMatch_(type, have, op, want, aliases) {
  *                         countryNames: { tidied other name -> country name } }
  *   Species rows have the species-table fields plus `extinct`; `regions` must
  *   already include the regions a "Worldwide" species counts towards.
- * @return {{columns: Array<{field, label, type}>, rows: Array[], total: number}}
+ * @return {{columns: Array<{field, label, type}>, rows: Array[], total: number, kinds: Array<{familyLatin, order}>}}
  */
 function runQuery_(q, data) {
   const T = ASK_TABLES_[q.table];
@@ -520,9 +520,12 @@ function runQuery_(q, data) {
   const extra = q.filters.filter(f => T.fields[f.field][0] !== 'yesno').map(f => f.field)
     .concat(q.sortField === T.sort[0] ? [] : [q.sortField]);
   extra.forEach(f => { if (!fields.includes(f)) fields.push(f); });
+  const shown = rows.slice(0, q.limit);
   return {
     columns: fields.map(f => ({ field: f, label: T.fields[f][1], type: T.fields[f][0] })),
-    rows: rows.slice(0, q.limit).map(r => fields.map(f => r[f] === undefined ? null : r[f])),
+    rows: shown.map(r => fields.map(f => r[f] === undefined ? null : r[f])),
     total: rows.length,
+    // Each row's family and order, shown or not, so the page can draw the bird's silhouette
+    kinds: shown.map(r => ({ familyLatin: r.familyLatin || '', order: r.order || '' })),
   };
 }

@@ -28,9 +28,9 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 - **The count:** species, families, orders and countries seen, as a share of the world's living birds, plus threatened species (IUCN Vulnerable or worse).
 - **Where in the world:** a map of countries birded, shaded by species recorded, and bars showing how much of each region's breeding birds you've seen.
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
-- **Latest lifers:** the first time each species was seen, with a search box.
+- **Latest lifers:** the first time each species was seen, with a search box and a field-guide silhouette of each bird's body shape (heron, wader, owl, finch…). All 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
 - **Names to check:** every eBird name that doesn't match AviList, with an AI-assisted suggestion you can accept, change or ignore.
-- **Ask your list:** questions in plain English, answered from your own data.
+- **Ask your list:** questions in plain English, answered from your own data, with the same silhouettes beside species, families and orders.
 
 ## The AI features, and how they're kept honest
 
@@ -79,13 +79,14 @@ If both models are unavailable or the cap is reached, **the rest of the site kee
 
 ## Testing
 
-- **81 automated tests** (`node --test`) cover:
+- **107 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers
   - Lyrebird's request checks, run against fake Google services, so no real key or internet is needed
   - the query checker, which has to reject unknown tables and fields, the wrong value types, and tampered replies
   - a check that the website's copies of the shared code are up to date
+  - a check that every AviList family has a silhouette, so a new AviList edition can't quietly leave a bird without one
 - **A coverage check for Name Fixes** (`tools/check-ebird-coverage.js`) runs every one of eBird's 11,201 species names, and 4,700 subspecies groups and forms, through the matching with no AI. **99.9% are settled without AI**: 11,168 match AviList directly, and 21 more through AviList's subspecies list (all 21 checked by hand). The 12 left over are all extinct birds that AviList's list leaves out, so every living bird eBird recognises is matched with no AI. Full report: [`Tests/ebird-coverage.md`](Tests/ebird-coverage.md).
   - **It found a real bug.** The eBird reader skipped any name containing "domestic" or "hybrid", meant for farmyard ducks and hybrids. But that also threw away **House Sparrow** (*Passer domesticus*), **Whiskered Tern** (*Chlidonias hybrida*) and Kelp Goose (*Chloephaga hybrida*). My own list was two species short (638, not 640). It now matches eBird's exact labels, "(Domestic type)" and "(hybrid)", and tests cover all three birds.
 - **An accuracy check for Ask your list** (`tools/check-questions.js`) sends 16 realistic questions to the live AI and records whether each was understood correctly, including two it *should* refuse. I ran the same questions on two models:
@@ -143,6 +144,7 @@ Some things I learned along the way:
 | `NameFixesAssistant.gs` | Name matching, shortlist, confidence rules and the AI call to Groq or Google (shared by the sheet, Lyrebird and the website) |
 | `AskYourList.gs` | The question tool: allowed tables, prompt, query checker, runner and description (shared) |
 | `Lyrebird/Lyrebird.gs` | The AI middleman web app |
+| `docs/js/bird-icons.js` | The body-shape silhouettes: which shape each family gets, and the numbers each shape is drawn from |
 | `docs/` | The website, served by GitHub Pages. `docs/lib/` holds generated copies of the shared `.gs` files |
 | `tools/` | Scripts run on my computer: convert AviList, copy shared code to the site, build country names, run the accuracy check |
 | `Tests/` | Automated tests and accuracy results |

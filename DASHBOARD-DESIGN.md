@@ -46,6 +46,7 @@ Field-guide style, like a modern bird book rather than an app:
 - Works on a phone as well as a laptop.
 - Light mode only, whatever the device setting: darker always means more.
 - Section headings only (no "Plate I, II…" labels).
+- *Added 13 Nov:* each lifer has a silhouette of its body shape, like a field guide. `docs/js/bird-icons.js` maps every AviList family to one of 32 shapes (mostly by order, with exceptions such as herons vs ibises, gulls vs sandpipers, crows and finches vs other songbirds), and draws each shape from a few numbers (body, head, bill, tail, legs) so all icons share one style. Decorative (hidden from screen readers), with the shape's name as a tooltip. A test checks every family has a drawn shape.
 - A dashed red "expedition route" flows behind the page (no loops), showing in the gaps between sections and the margins. It starts at a multi-directional signpost by the title and ends at a red X ("X marks the spot") below the footer. Solid line-drawn icons sit along it: a mountain, forest and lake around the title, where the effect is seen most, and a forest and lake at bends further down. Drawn by code from the section positions and redrawn whenever the page changes size; decoration only (hidden from screen readers).
 
 ## Where the data comes from

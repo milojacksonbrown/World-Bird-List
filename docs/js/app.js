@@ -97,7 +97,10 @@
 
   function liferItem(l) {
     return '<li><span class="date">' + esc(date(l.date)) + '</span>' +
-      '<span><span class="name">' + esc(l.common) + '</span> <span class="sci">' + esc(l.sci) + '</span></span>' +
+      // A silhouette of the bird's body shape (bird-icons.js), with its name as a tooltip
+      '<span class="who"><span class="icon" title="' + esc(SHAPES[birdShape_(l.familyLatin, l.order)].label) + '">' +
+        birdIconSvg_(birdShape_(l.familyLatin, l.order), 26) + '</span>' +
+        '<span><span class="name">' + esc(l.common) + '</span> <span class="sci">' + esc(l.sci) + '</span></span></span>' +
       // Link only real eBird checklist IDs ("S123…"); the sample data's are made up
       '<span class="where">' + (/^S\d+$/.test(l.checklist)
         ? '<a href="https://ebird.org/checklist/' + encodeURIComponent(l.checklist) + '">' + esc(l.place || 'eBird checklist') + '</a>'
@@ -279,8 +282,11 @@
     return askCache.data;
   }
 
-  /** One table cell, formatted by the kind of value. */
-  function askCell(col, v) {
+  // Tables whose rows are birds (a species, family or order) get a silhouette in the first column
+  const BIRD_TABLES = ['species', 'families', 'orders'];
+
+  /** One table cell, formatted by the kind of value; `kind` adds a silhouette (bird-icons.js). */
+  function askCell(col, v, kind) {
     const empty = v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length);
     const cls = col.type === 'number' ? ' class="num"' : '';
     if (empty) return '<td' + cls + '>—</td>';
@@ -291,7 +297,11 @@
     else if (col.type === 'list') text = v.join(', ');
     else text = v;
     const latin = ['scientific', 'familyLatin', 'order'].includes(col.field);
-    return '<td' + cls + '>' + (latin ? '<span class="sci">' + esc(text) + '</span>' : esc(text)) + '</td>';
+    const words = latin ? '<span class="sci">' + esc(text) + '</span>' : esc(text);
+    if (!kind) return '<td' + cls + '>' + words + '</td>';
+    const shape = birdShape_(kind.familyLatin, kind.order);
+    return '<td' + cls + '><span class="with-icon"><span class="icon" title="' + esc(SHAPES[shape].label) + '">' +
+      birdIconSvg_(shape, 22) + '</span>' + words + '</span></td>';
   }
 
   function renderAsk() {
@@ -308,7 +318,8 @@
         ? '<div class="table-wrap"><table class="ask-table"><thead><tr>' +
             res.columns.map(c => '<th' + (c.type === 'number' ? ' class="num"' : '') + ' scope="col">' + esc(c.label) + '</th>').join('') +
           '</tr></thead><tbody>' +
-            res.rows.map(r => '<tr>' + r.map((v, i) => askCell(res.columns[i], v)).join('') + '</tr>').join('') +
+            res.rows.map((r, ri) => '<tr>' + r.map((v, i) => i === 0 && BIRD_TABLES.includes(q.table)
+              ? askCell(res.columns[i], v, res.kinds[ri]) : askCell(res.columns[i], v)).join('') + '</tr>').join('') +
           '</tbody></table></div>'
         : '') +
       // Only when the question didn't say how many: a hint that more can be asked for

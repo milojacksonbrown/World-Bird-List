@@ -259,7 +259,8 @@ function buildDashboard_(rows, checklist, fixes) {
   // Lifers: every species seen, with its first sighting, newest first
   const lifers = [...ebird.bySpecies.entries()].map(([i, x]) => {
     const s = checklist.species[i];
-    return { i, sci: s.sci, common: s.common, family: s.familyEn || s.family, date: x.date || null, place: x.loc || '', checklist: x.sub || '' };
+    return { i, sci: s.sci, common: s.common, family: s.familyEn || s.family, familyLatin: s.family, order: s.order,
+             date: x.date || null, place: x.loc || '', checklist: x.sub || '' };
   }).sort((a, b) => (b.date ? b.date.getTime() : 0) - (a.date ? a.date.getTime() : 0));
 
   // Lifers per year, and per month of the year (all Januaries together…) for seasonality

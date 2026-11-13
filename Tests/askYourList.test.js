@@ -260,3 +260,14 @@ test('columns: only fields of the table, at most six, shown in the description',
   ctx.Q = check({ table: 'countries', columns: ['firstLifer', 'firstLiferDate'] }).query;
   assert.equal(run('describeQuery_(Q)'), 'Countries, species highest first, up to 25, showing first lifer and first lifer date.');
 });
+
+test('each result row carries its family and order, for the bird silhouettes', () => {
+  const r = ask({ table: 'species', filters: [{ field: 'seen', op: 'eq', value: 'true' }], sortField: 'common', limit: 2 });
+  assert.equal(r.kinds.length, r.rows.length);
+  assert.deepEqual(r.rows.map(x => x[0]), ['European Turtle Dove', 'Grey Heron']);
+  assert.deepEqual(r.kinds, [{ familyLatin: 'Columbidae', order: 'Columbiformes' }, { familyLatin: 'Ardeidae', order: 'Pelecaniformes' }]);
+  const orders = ask({ table: 'orders', filters: [{ field: 'order', op: 'eq', value: 'Passeriformes' }] });
+  assert.deepEqual(orders.kinds, [{ familyLatin: '', order: 'Passeriformes' }]);
+  const years = ask({ table: 'years' });
+  assert.ok(years.kinds.every(k => k.familyLatin === '' && k.order === ''));   // not birds: no silhouette
+});

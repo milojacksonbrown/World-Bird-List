@@ -156,7 +156,12 @@ h1 {
 .lifers .date { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .lifers .name { font-weight: 600; }
 .lifers .sci, .unmatched .sci { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--ink-soft); }
-.lifers .where { grid-column: 2; color: var(--ink-soft); font-size: 0.92rem; }
+.lifers .where { grid-column: 2; color: var(--ink-soft); font-size: 0.92rem; padding-left: 36px; }   /* lines up with the name, past the icon */
+
+/* ---------- lifers: body-shape silhouettes (bird-icons.js) ---------- */
+.lifers .who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.lifers .icon { flex: none; display: inline-flex; color: var(--green-soft); }
+.bird-icon .eye { fill: var(--card); }
 
 /* ---------- unmatched ---------- */
 .unmatched { list-style: none; margin: 0; padding: 0; }
@@ -242,6 +247,8 @@ h1 {
 .ask-table td.num, .ask-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .ask-table tr:last-child td { border-bottom: 0; }
 .ask-table .sci { font-family: var(--serif); font-style: italic; color: var(--ink-soft); }
+.ask-table .with-icon { display: inline-flex; align-items: flex-start; gap: 8px; min-width: 12em; }   /* icon beside the first line */
+.ask-table .icon { flex: none; display: inline-flex; color: var(--green-soft); margin-top: 1px; }
 .ask-more { margin: 8px 0 0; font-size: 0.88rem; color: var(--ink-soft); font-style: italic; }
 
 /* ---------- footer ---------- */
