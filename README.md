@@ -32,6 +32,12 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 - **Names to check:** every eBird name that doesn't match AviList, with an AI-assisted suggestion you can accept, change or ignore.
 - **Ask your list:** questions in plain English, answered from your own data, with the same silhouettes beside species, families and orders.
 
+![The map zoomed into the United Kingdom: counties shaded by species seen, beside bars such as London 76 of 382 species (19.9%) and North Yorkshire 54 of 408 (13.2%)](docs/screenshot-uk-counties.png)
+
+*Clicking the United Kingdom: each county is shaded by species seen, and the bars show the share of the species ever recorded there.*
+
+The species totals come from eBird's API. A small tool (`tools/fetch-region-totals.js`) asked for every country, state and county once, about 4,300 requests, and saved only the counts (52 KB). The site reads that file, so visitors never call eBird and my key isn't needed or exposed.
+
 ## The AI features, and how they're kept honest
 
 Both features follow one rule: **the AI proposes, ordinary code verifies.** The AI never edits data and never answers from its own memory. It makes a choice from a fixed set of options, and code checks that choice before anything happens.
@@ -134,6 +140,8 @@ Some things I learned along the way:
 - **Measure before choosing a model.** The same 16 questions on three models gave a clear answer (16, 14 and 10 of 16), instead of a guess. Switching company took one small code change, because all AI calls go through one function and every answer is checked the same way.
 - **Don't depend on one provider.** Free tiers run out, get busy and withdraw models. Two companies in a fallback chain keep the feature working.
 - **Plan for the free tier failing.** Rate limits, withdrawn models and busy servers are normal, so the product should still work without the AI.
+- **Be polite to free APIs, and make long jobs resumable.** eBird answered "too many requests" (HTTP 429) when the totals tool asked too fast. It now sends one request at a time, pauses and slows down when refused, and caches every answer, so a stopped run carries on where it left off.
+- **Make a chart answer the reader's question.** Bars scaled to my best region made Victoria look complete when I'd seen 30% of its birds. Showing species seen out of the total recorded fixed it.
 - **Keep secrets out of code**: API keys live in Script Properties, behind a middleman with a spending cap.
 
 ## Project layout
