@@ -51,7 +51,7 @@
 
     <section class="plate" aria-labelledby="world-title">
       <h2 id="world-title">Where in the world</h2>
-      <p class="caption">The countries you've birded in, shaded by how many species you've recorded there. The bars show how many of the birds regularly found in each region (breeding, wintering or on migration) you've seen, wherever you saw them. Rare vagrants aren't included. Tap or hover over a country for details, and click a birded country to see its states and provinces.</p>
+      <p class="caption">The countries you've birded in, shaded by the share of the species ever recorded there (eBird) that you've seen. The bars show how many of the birds regularly found in each region (breeding, wintering or on migration) you've seen, wherever you saw them. Rare vagrants aren't included. Tap or hover over a country for details, and click a birded country to see its states and provinces.</p>
       <div class="world">
         <div class="map-wrap">
           <div id="map" class="map" role="img" aria-label="World map of the countries birded in, shaded by the number of species recorded in each. Region figures are listed beside it."></div>
@@ -93,15 +93,15 @@
       <p class="caption">Ask a question in plain English. The answer comes from your own data, and you're shown how the question was understood.</p>
       <form id="ask-form" class="ask-form">
         <label for="ask-input" class="visually-hidden">Your question</label>
-        <input id="ask-input" type="text" maxlength="300" autocomplete="off" placeholder="e.g. Which families have I seen less than 10% of?">
+        <input id="ask-input" type="text" maxlength="300" autocomplete="off" placeholder="e.g. What waterfowl have I seen?">
         <button id="ask-button" type="submit" class="button primary">Ask</button>
       </form>
       <div class="ask-examples" aria-label="Example questions">
         <span>Try:</span>
-        <button type="button" class="chip">Which families have I seen less than 10% of?</button>
+        <button type="button" class="chip">What waterfowl have I seen?</button>
         <button type="button" class="chip">Which year did I get the most lifers?</button>
         <button type="button" class="chip">What threatened species have I seen?</button>
-        <button type="button" class="chip">Which owls have I seen in Africa?</button>
+        <button type="button" class="chip">Which birds have I seen in North Yorkshire, England?</button>
         <button type="button" class="chip">What were my first 10 lifers?</button>
       </div>
       <p class="ai-note">Your question (and nothing else) goes through Lyrebird to an AI model (OpenAI's GPT-OSS on Groq, or Google's

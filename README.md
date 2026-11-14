@@ -26,7 +26,7 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 ## What it does
 
 - **The count:** species, families, orders and countries seen, as a share of the world's living birds, plus threatened species (IUCN Vulnerable or worse).
-- **Where in the world:** a map of countries birded, shaded by species recorded, and bars showing how much of each region's birds you've seen. Click a country to zoom into its states and provinces (counties in the UK, France, Ireland and Indonesia), shaded by species, with species, lifers and the % of the species eBird has recorded there.
+- **Where in the world:** a map of countries birded, shaded by the % of the species recorded there (eBird) that you've seen, and bars showing how much of each region's birds you've seen. Click a country to zoom into its states and provinces (counties in the UK, France, Ireland and Indonesia), shaded the same way, with species, lifers and the % of the species eBird has recorded there.
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
 - **Latest lifers:** the first time each species was seen, with a search box and a field-guide silhouette of each bird's body shape (heron, wader, owl, finch…). All 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
 - **Names to check:** every eBird name that doesn't match AviList, with an AI-assisted suggestion you can accept, change or ignore.

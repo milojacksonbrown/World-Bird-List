@@ -16,6 +16,7 @@
   --sea: #dde3dc;
   --map-none: #efe8d8;
   --trail: #b23a28;                   /* red route lines */
+  --map-unknown: #d9cfbb;     /* birded, but eBird has no species total for the place */
   --map-1: #d3e4c8; --map-2: #a9cf9f; --map-3: #74b083; --map-4: #3f8460; --map-5: #1b4332;
   --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
   --sans: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;

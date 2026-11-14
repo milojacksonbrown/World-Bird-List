@@ -437,12 +437,10 @@
     if (!window.L) { $('#map').textContent = 'The map could not load (no internet?). The figures beside it still work.'; return; }
     const byRegion = new Map(d.regions.map(r => [r.name, r]));
     const speciesIn = new Map(d.countries.map(c => [c.code, c.species]));
-    // Birded countries in five shades by species recorded there; unbirded countries stay plain.
-    // Square-root scale, so countries with a handful of species still differ from those with dozens.
-    const most = Math.max(0, ...d.countries.map(c => c.species));
-    const shade = n => (!n || !most) ? 0 : Math.max(1, Math.min(5, Math.ceil(Math.sqrt(n / most) * 5)));
-    const upTo = k => Math.round(most * (k / 5) ** 2);
-    const colour = n => css(n ? '--map-' + n : '--map-none');
+    await loadTotals();
+    // Birded countries shaded by the share of eBird's recorded species seen there; unbirded stay plain
+    const scale = shadeScale(d.countries.map(c => c.species));
+    const totalOf = cc => (regionTotals && regionTotals.regions && regionTotals.regions[cc]) || null;
 
     if (!map) {
       map = L.map('map', { worldCopyJump: true, minZoom: 1, maxZoom: 6, zoomSnap: 0.25, scrollWheelZoom: false })
@@ -464,14 +462,15 @@
     if (stateLayer) { stateLayer.remove(); stateLayer = null; }
     countryLayer = L.geoJSON(countryShapes, {
       style: f => ({
-        fillColor: colour(shade(speciesIn.get(countryCode_(f.properties)))), fillOpacity: 1, color: css('--rule'), weight: 0.6,
+        fillColor: scale.fill(speciesIn.get(countryCode_(f.properties)), totalOf(countryCode_(f.properties))), fillOpacity: 1, color: css('--rule'), weight: 0.6,
       }),
       onEachFeature: (f, layer) => {
         const p = f.properties, region = regionForCountry_(p), r = byRegion.get(region);
-        const n = speciesIn.get(countryCode_(p));
+        const n = speciesIn.get(countryCode_(p)), t = totalOf(countryCode_(p));
         if (n) layer.on('click', () => openCountry(countryCode_(p)));          // zoom in to its regions
         layer.bindTooltip('<strong>' + esc(p.NAME) + '</strong><br>' +
-          (n ? num(n) + ' species recorded here<br><em>Click to see its regions</em>' : 'Not birded yet') +
+          (n ? num(n) + (t ? ' of ' + num(t) + ' species (' + pct(Math.min(1, n / t)) + ')' : ' species recorded here') +
+            '<br><em>Click to see its regions</em>' : 'Not birded yet') +
           (r ? '<br><span class="tip-region">' + esc(region) + ': ' + num(r.seen) + ' of ' + num(r.total) +
             ' regional species seen (' + pct(r.pct) + ')</span>' : ''), { sticky: true });
       },
@@ -482,20 +481,43 @@
       map._fittedWorld = true;
     }
 
-    $('#map-legend').innerHTML = legendHtml(most);
+    $('#map-legend').innerHTML = scale.legend;
     // A button per birded country: another way in, for phones and keyboards
     $('#map-countries').innerHTML = d.countries.length ? '<span class="lead">See the regions of:</span>' +
       d.countries.map(c => '<button type="button" class="chip" data-cc="' + esc(c.code) + '">' + esc(countryName(c.code)) + '</button>').join('') : '';
     if (zoomed) openCountry(zoomed.cc);              // redrawn after a change (e.g. a name fix): stay zoomed in
   }
 
-  /** The legend: five shades on a square-root scale up to `most` species. */
-  function legendHtml(most) {
+  /**
+   * How the map is shaded, and its legend. With eBird's totals: five fixed bands of
+   * the share of the species recorded in a place that you've seen there, the same
+   * on the world map and inside a country, so a shade always means the same thing.
+   * A birded place with no total gets its own shade, rather than a guess. Without
+   * the totals file: species seen, on a square-root scale up to the best place.
+   * @param {number[]} counts  species seen in each birded place (for the fallback scale)
+   */
+  const PCT_BANDS = [5, 10, 20, 40];               // upper edges, in %; the fifth band is 40% or more
+  function shadeScale(counts) {
     const colour = n => css(n ? '--map-' + n : '--map-none');
+    const key = (c, words) => '<span class="key"><span class="swatch" style="background:' + c + '"></span>' + words + '</span>';
+    if (regionTotals) {
+      const band = p => 1 + PCT_BANDS.filter(edge => p >= edge).length;
+      return {
+        fill: (n, total) => !n ? colour(0) : total ? colour(band(100 * n / total)) : css('--map-unknown'),
+        legend: key(colour(0), 'not birded') +
+          [1, 2, 3, 4, 5].map(k => key(colour(k), k === 1 ? 'under ' + PCT_BANDS[0] + '%'
+            : k === 5 ? PCT_BANDS[3] + '%+' : PCT_BANDS[k - 2] + '–' + PCT_BANDS[k - 1] + '%')).join('') +
+          '<span class="key">of the species recorded there (eBird)</span>' + key(css('--map-unknown'), 'birded, no eBird total'),
+      };
+    }
+    const most = Math.max(0, ...counts);
+    const shade = n => (!n || !most) ? 0 : Math.max(1, Math.min(5, Math.ceil(Math.sqrt(n / most) * 5)));
     const upTo = k => Math.round(most * (k / 5) ** 2);
-    return '<span class="key"><span class="swatch" style="background:' + colour(0) + '"></span>not birded</span>' +
-      [1, 2, 3, 4, 5].map(k => '<span class="key"><span class="swatch" style="background:' + colour(k) + '"></span>up to ' +
-        num(Math.max(1, upTo(k))) + '</span>').join('') + '<span class="key">species</span>';
+    return {
+      fill: n => colour(shade(n)),
+      legend: key(colour(0), 'not birded') +
+        [1, 2, 3, 4, 5].map(k => key(colour(k), 'up to ' + num(Math.max(1, upTo(k))))).join('') + '<span class="key">species</span>',
+    };
   }
 
   /** A country's English name: from countries.json, else the map's own, else its code. */
@@ -527,17 +549,15 @@
     await loadTotals();
     if (!zoomed || zoomed.cc !== cc) return;        // the visitor moved on while it loaded
     const { level, shapes, unmapped } = countryRegions_(file, current.d.stats, cc, regionTotals);
-    // The country's own scale, so its regions differ from each other
-    const most = Math.max(0, ...shapes.map(s => s.species), ...unmapped.map(s => s.species));
-    const shade = n => (!n || !most) ? 0 : Math.max(1, Math.min(5, Math.ceil(Math.sqrt(n / most) * 5)));
-    const colour = n => css(n ? '--map-' + n : '--map-none');
+    // The same % bands as the world map (or, without totals, the country's own species scale)
+    const scale = shadeScale(shapes.map(s => s.species).concat(unmapped.map(s => s.species)));
 
     countryLayer.setStyle(f => countryCode_(f.properties) === cc ? { fillOpacity: 0, opacity: 0 } : { fillOpacity: 0.35, opacity: 0.5 });
     if (stateLayer) stateLayer.remove();
     stateLayer = L.geoJSON({ type: 'FeatureCollection', features: shapes.map(s =>
       ({ type: 'Feature', properties: s, geometry: { type: 'MultiPolygon', coordinates: s.polys } })) }, {
       // A group (Sulawesi, Leinster...) is drawn as its parts: lines in its own colour, so it reads as one region
-      style: f => { const fill = colour(shade(f.properties.species));
+      style: f => { const fill = scale.fill(f.properties.species, f.properties.total);
         // (a slightly thicker line also covers hairline gaps where simplified neighbours don't quite meet)
         return { fillColor: fill, fillOpacity: 1, color: f.properties.group ? fill : css('--rule'), weight: f.properties.group ? 1.6 : 0.6 }; },
       onEachFeature: (f, layer) => {
@@ -553,7 +573,7 @@
     const bounds = birded.getLayers().length ? birded.getBounds() : stateLayer.getBounds();
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [16, 16], maxZoom: 6 });
 
-    $('#map-legend').innerHTML = legendHtml(most);
+    $('#map-legend').innerHTML = scale.legend;
     renderCountryPanel(cc, level, shapes.filter(s => s.species).concat(unmapped.map(u => Object.assign({ unmapped: true }, u))));
     redrawTrail();
   }
