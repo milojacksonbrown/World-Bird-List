@@ -119,10 +119,11 @@ function activityByDate_(rows, index) {
  * "Ask your list". One pass over the eBird rows, matching names exactly as
  * the lifer list does (resolveEbirdName_), and ordering by date and time as
  * summariseEbird_ does, so the "first" here agrees with the lifer list.
- * @return {{species: Object<number,{checklists:number, firstCountry:string}>,
+ * @return {{species: Object<number,{checklists:number, firstCountry:string, states:string[], counties:string[]}>,
  *           countries: Object<string,{firstVisit:Date, firstSpecies:number, lifers:number, firstLifer:?number, firstLiferDate:?Date}>,
- *           states: Object<string,{species:number, lifers:number}>,     states: eBird's State/Province codes, e.g. AU-VIC
- *           counties: Object<string,{species:number, lifers:number}>}}  counties: "GB-ENG|North Yorkshire" (state code | County column)
+ *           states: Object<string,Place>,     states: eBird's State/Province codes, e.g. AU-VIC
+ *           counties: Object<string,Place>}}  counties: "GB-ENG|North Yorkshire" (state code | County column)
+ *   Place = {species, lifers, firstVisit, firstSpecies, firstLifer, firstLiferDate}, as for countries.
  *   Keyed by species number and two-letter country code. (Counts of individual
  *   birds aren't used: most records are eBird's "X", seen but not counted.)
  */
@@ -139,6 +140,7 @@ function speciesStats_(rows, index) {
   const stateSp = {};                  // state code (e.g. AU-VIC) -> Set of species
   const countySp = {};                 // "GB-ENG|North Yorkshire" -> Set of species
   const states = out.states;
+  const firstIn = {};                  // state code or county key -> earliest {key, date, species}
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     const sci = String(r[col.sci] || '').trim();
@@ -146,18 +148,25 @@ function speciesStats_(rows, index) {
     const res = resolveEbirdName_(sci, col.common >= 0 ? String(r[col.common] || '').trim() : '', index);
     if (res.skip || res.target === undefined || res.target === null) continue;
     const t = res.target;
-    const st = out.species[t] || (out.species[t] = { checklists: 0, firstCountry: '' });
+    const st = out.species[t] || (out.species[t] = { checklists: 0, firstCountry: '', states: new Set(), counties: new Set() });
     const sub = col.sub >= 0 ? String(r[col.sub] || '').trim() : '';
     (subs[t] = subs[t] || new Set()).add(sub || 'row' + i);
     const state = String(col.state >= 0 ? r[col.state] : '').trim().toUpperCase();
     const county = col.county >= 0 ? String(r[col.county] || '').trim() : '';
-    if (/^[A-Z]{2}-[A-Z0-9]+$/.test(state)) {
+    const isState = /^[A-Z]{2}-[A-Z0-9]+$/.test(state);
+    if (isState) {
       (stateSp[state] = stateSp[state] || new Set()).add(t);
-      if (county) (countySp[state + '|' + county] = countySp[state + '|' + county] || new Set()).add(t);
+      st.states.add(state);
+      if (county) { (countySp[state + '|' + county] = countySp[state + '|' + county] || new Set()).add(t); st.counties.add(state + '|' + county); }
     }
     const date = col.date >= 0 ? parseEbirdDate_(r[col.date]) : null;
     if (!date) continue;
     const key = date.getTime() + parseEbirdTime_(col.time >= 0 ? r[col.time] : '') * 60000;
+    if (isState) {                                   // the first record in each state and county
+      if (!firstIn[state] || key < firstIn[state].key) firstIn[state] = { key, date, species: t };
+      const ck = state + '|' + county;
+      if (county && (!firstIn[ck] || key < firstIn[ck].key)) firstIn[ck] = { key, date, species: t };
+    }
     const cc = state.split('-')[0];
     if (!firstOf[t] || key < firstOf[t].key) firstOf[t] = { key, date, cc, state, county };
     if (/^[A-Z]{2}$/.test(cc)) {
@@ -165,21 +174,33 @@ function speciesStats_(rows, index) {
       if (key < c.key) { c.key = key; c.firstVisit = date; c.firstSpecies = t; }
     }
   }
-  Object.keys(stateSp).forEach(code => { states[code] = { species: stateSp[code].size, lifers: 0 }; });
-  Object.keys(countySp).forEach(k => { out.counties[k] = { species: countySp[k].size, lifers: 0 }; });
+  // Each state and county: species, lifers gained there, first record and first lifer
+  const place = (k, n) => ({ species: n, lifers: 0, firstVisit: firstIn[k] ? firstIn[k].date : null,
+    firstSpecies: firstIn[k] ? Number(firstIn[k].species) : null, firstLifer: null, firstLiferDate: null, liferKey: Infinity });
+  Object.keys(stateSp).forEach(code => { states[code] = place(code, stateSp[code].size); });
+  Object.keys(countySp).forEach(k => { out.counties[k] = place(k, countySp[k].size); });
+  const liferIn = (p, f, t) => {
+    if (!p) return;
+    p.lifers++;
+    if (f.key < p.liferKey) { p.liferKey = f.key; p.firstLifer = Number(t); p.firstLiferDate = f.date; }
+  };
   Object.keys(out.species).forEach(t => {
-    out.species[t].checklists = subs[t].size;
+    const sp = out.species[t];
+    sp.checklists = subs[t].size;
+    sp.states = [...sp.states];                      // codes, e.g. "AU-VIC"
+    sp.counties = [...sp.counties];                  // "AU-VIC|Melbourne"
     const f = firstOf[t];
     if (!f) return;
-    out.species[t].firstCountry = /^[A-Z]{2}$/.test(f.cc) ? f.cc : '';
-    if (out.states[f.state]) out.states[f.state].lifers++;   // and in this state or province
-    if (f.county && out.counties[f.state + '|' + f.county]) out.counties[f.state + '|' + f.county].lifers++;
+    sp.firstCountry = /^[A-Z]{2}$/.test(f.cc) ? f.cc : '';
+    liferIn(out.states[f.state], f, t);                    // and in this state or province
+    if (f.county) liferIn(out.counties[f.state + '|' + f.county], f, t);
     const c = out.countries[f.cc];                   // the lifer was gained in this country
     if (!c) return;
     c.lifers++;
     if (f.key < c.liferKey) { c.liferKey = f.key; c.firstLifer = Number(t); c.firstLiferDate = f.date; }
   });
   Object.values(out.countries).forEach(c => { delete c.key; delete c.liferKey; });
+  Object.values(out.states).concat(Object.values(out.counties)).forEach(p => { delete p.liferKey; });
   return out;
 }
 
@@ -417,10 +438,16 @@ function isoDay_(d) {
  * @param {Object} d  from buildDashboard_
  * @param {Object} checklist  from loadChecklist_
  * @param {Object} [countries]  from loadCountries_; without it, countries show as codes
+ * @param {Object} [totals]  docs/data/region-totals.json: state names and eBird's species totals;
+ *   without it, states show as codes (AU-VIC) and "% seen" is empty
  */
-function askData_(d, checklist, countries) {
+function askData_(d, checklist, countries, totals) {
   const C = countries || { byCode: {}, names: {} };
   const countryName = code => (C.byCode[code] && C.byCode[code].name) || code;
+  const T = totals || {};
+  const stateName = code => (T.names && T.names[code]) || code;
+  const placeName = k => k.includes('|') ? k.split('|')[1] : stateName(k);    // a county key, or a state code
+  const pctOf = (n, of) => of ? Math.min(100, Math.round(1000 * n / of) / 10) : null;
   const firsts = new Map(d.lifers.map(l => [l.i, l]));
   const st = (d.stats && d.stats.species) || {}, cst = (d.stats && d.stats.countries) || {};
   const nameOf = i => (i === null || i === undefined) ? null : checklist.species[i].common || checklist.species[i].sci;
@@ -437,6 +464,7 @@ function askData_(d, checklist, countries) {
       firstCountry: st[s.i] && st[s.i].firstCountry ? countryName(st[s.i].firstCountry) : null,
       checklists: st[s.i] ? st[s.i].checklists : 0,
       countries: (d.speciesCountries[s.i] || []).map(countryName),
+      places: st[s.i] ? [...new Set((st[s.i].states || []).concat(st[s.i].counties || []).map(placeName))] : [],
       // "Worldwide" species count towards every land region, as on the region bars
       regions: checklist.regions.filter(r => r !== 'Worldwide' && inRegion_(s, r)),
     };
@@ -458,6 +486,20 @@ function askData_(d, checklist, countries) {
         lifers: f.lifers || 0, firstLifer: nameOf(f.firstLifer), firstLiferDate: isoDay_(f.firstLiferDate),
       };
     }),
+    // States, provinces and counties: from eBird's State/Province and County columns
+    places: Object.entries((d.stats && d.stats.states) || {}).map(([code, p]) => ({ key: code, p, level: 'state' }))
+      .concat(Object.entries((d.stats && d.stats.counties) || {}).map(([k, p]) => ({ key: k, p, level: 'county' })))
+      .map(({ key, p, level }) => {
+        const state = key.split('|')[0], country = countryName(state.split('-')[0]);
+        const recorded = (level === 'state' ? T.regions && T.regions[key] : T.counties && T.counties[key]) || null;
+        return {
+          place: placeName(key), level, country,
+          within: level === 'state' ? country : stateName(state) + ', ' + country,
+          species: p.species, lifers: p.lifers, recorded, pctSeen: pctOf(p.species, recorded),
+          firstVisit: isoDay_(p.firstVisit), firstSpecies: nameOf(p.firstSpecies),
+          firstLifer: nameOf(p.firstLifer), firstLiferDate: isoDay_(p.firstLiferDate),
+        };
+      }),
     years,
     months,
     countryNames: C.names,

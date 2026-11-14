@@ -30,7 +30,7 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
 - **Latest lifers:** the first time each species was seen, with a search box and a field-guide silhouette of each bird's body shape (heron, wader, owl, finch…). All 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
 - **Names to check:** every eBird name that doesn't match AviList, with an AI-assisted suggestion you can accept, change or ignore.
-- **Ask your list:** questions in plain English, answered from your own data, with the same silhouettes beside species, families and orders.
+- **Ask your list:** questions in plain English, answered from your own data, with the same silhouettes beside species, families and orders. It goes down to states, provinces and counties too: *Which county have I seen the most species in? What have I seen in Suffolk? My first lifer in each Australian state?*
 
 ![The map zoomed into the United Kingdom: counties shaded by species seen, beside bars such as London 76 of 382 species (19.9%) and North Yorkshire 54 of 408 (13.2%)](docs/screenshot-uk-counties.png)
 

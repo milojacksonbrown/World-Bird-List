@@ -139,7 +139,7 @@ test('the prompt holds the question and the allowed tables, and no data from the
   assert.match(p, /pctSeen \(number\)/);
   assert.ok(!/Hyde Park|Ardea|Doñana/.test(p));      // nothing from the eBird file
   const schema = plain(run('queryResponseSchema_()'));
-  assert.deepEqual(schema.properties.table.enum, ['species', 'families', 'orders', 'countries', 'years', 'months']);
+  assert.deepEqual(schema.properties.table.enum, ['species', 'families', 'orders', 'countries', 'places', 'years', 'months']);
   // Every key required: Gemini drops optional keys (found in the accuracy check)
   assert.deepEqual(schema.required.slice().sort(), Object.keys(schema.properties).sort());
 });
@@ -250,6 +250,59 @@ test('the first bird recorded in a country can differ from the first lifer there
   const fr = plain(run('ASK2.countries')).find(c => c.country === 'FR');   // no name in the test list: shown as its code
   assert.deepEqual([fr.firstSpecies, fr.firstLifer, fr.lifers], ['Grey Heron', 'Great Egret', 1]);
   assert.equal(plain(run('ASK2.species')).find(s => s.common === 'Great Egret').firstCountry, 'FR');
+});
+
+// ---------- states, provinces and counties ----------
+
+// The same list with eBird's County column, and the totals file's names and species totals
+const HC = H.concat(['County']);
+const rowc = (sub, common, sci, state, loc, date, county) => row(sub, common, sci, state, loc, date).concat([county]);
+const ROWSC = [HC,
+  rowc('S1', 'Gray Heron', 'Ardea cinerea', 'GB-ENG', 'Hyde Park', '2023-05-01', 'London'),
+  rowc('S2', 'Gray Heron', 'Ardea cinerea', 'GB-ENG', 'Fairburn Ings', '2022-03-10', 'North Yorkshire'),
+  rowc('S3', 'Osprey', 'Pandion haliaetus', 'ES-AN', 'Doñana', '2024-07-02', 'Huelva'),
+  rowc('S4', 'European Turtle Dove', 'Streptopelia turtur', 'ES-AN', 'Doñana', '2024-07-02', 'Huelva'),
+  rowc('S7', 'Gray Heron', 'Ardea cinerea', 'ES-AN', 'Doñana', '2024-07-03', 'Huelva'),
+];
+const TOTALS = { names: { 'GB-ENG': 'England', 'ES-AN': 'Andalusia' }, regions: { 'GB-ENG': 843, 'ES-AN': 0 },
+  counties: { 'GB-ENG|North Yorkshire': 408, 'GB-ENG|London': 382 } };
+ctx.ROWSC = ROWSC; ctx.TOTALS = TOTALS;
+run('var ASKC = askData_(buildDashboard_(ROWSC, CL), CL, loadCountries_(COUNTRIES), TOTALS);');
+const askPlaces = raw => { const c = check(raw); assert.equal(c.problem, ''); ctx.Q = c.query; return plain(run('runQuery_(Q, ASKC)')); };
+
+test('places: a row per state and county, named, with eBird\'s total and % seen', () => {
+  const r = askPlaces({ table: 'places', sortField: 'place', sortDir: 'asc', columns: ['level', 'recorded'] });
+  assert.deepEqual(r.columns.map(c => c.field), ['place', 'within', 'species', 'lifers', 'pctSeen', 'level', 'recorded']);
+  assert.deepEqual(r.rows, [
+    ['Andalusia', 'Spain', 3, 2, null, 'state', null],        // a total of 0 means unknown: no %
+    ['England', 'United Kingdom', 1, 1, 0.1, 'state', 843],
+    ['Huelva', 'Andalusia, Spain', 3, 2, null, 'county', null],
+    ['London', 'England, United Kingdom', 1, 0, 0.3, 'county', 382],
+    ['North Yorkshire', 'England, United Kingdom', 1, 1, 0.2, 'county', 408],
+  ]);
+});
+
+test('"which county have I seen the most species in", and firsts per place', () => {
+  const r = askPlaces({ table: 'places', filters: [{ field: 'level', op: 'eq', value: 'county' }], sortField: 'species', sortDir: 'desc', limit: 1 });
+  assert.deepEqual(col(r, 'place'), ['Huelva']);
+  const ny = plain(run('ASKC.places')).find(p => p.place === 'North Yorkshire');
+  assert.deepEqual([ny.firstVisit, ny.firstSpecies, ny.firstLifer, ny.firstLiferDate], ['2022-03-10', 'Grey Heron', 'Grey Heron', '2022-03-10']);
+  // lifers add up to the whole list, at each level
+  const places = plain(run('ASKC.places'));
+  for (const level of ['state', 'county']) assert.equal(places.filter(p => p.level === level).reduce((n, p) => n + p.lifers, 0), 3);
+});
+
+test('"what have I seen in North Yorkshire": species by the places they were recorded in', () => {
+  const r = askPlaces({ table: 'species', filters: [{ field: 'seen', op: 'eq', value: 'true' }, { field: 'places', op: 'has', value: 'north yorkshire' }] });
+  assert.deepEqual(col(r, 'common'), ['Grey Heron']);
+  const inSpain = askPlaces({ table: 'species', filters: [{ field: 'places', op: 'has', value: 'Andalusia' }], sortField: 'common', sortDir: 'asc' });
+  assert.deepEqual(col(inSpain, 'common'), ['European Turtle Dove', 'Grey Heron', 'Osprey']);
+});
+
+test('without the totals file, states show as codes and % seen is empty', () => {
+  run('var ASKN = askData_(buildDashboard_(ROWSC, CL), CL, loadCountries_(COUNTRIES));');
+  const eng = plain(run('ASKN.places')).find(p => p.place === 'GB-ENG');
+  assert.deepEqual([eng.recorded, eng.pctSeen, eng.within], [null, null, 'United Kingdom']);
 });
 
 test('columns: only fields of the table, at most six, shown in the description', () => {

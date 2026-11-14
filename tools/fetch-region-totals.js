@@ -12,6 +12,8 @@
 // paces itself and waits out eBird's "slow down" replies). Leave it running.
 // Every answer is cached in private/ebird-api-cache.json (git-ignored), so an
 // interrupted run carries on where it stopped and a re-run is quick.
+// Also saves each country's and state's name ("AU-VIC": "Victoria"), since the
+// eBird export only has the codes. With everything cached, no key is needed.
 // Counts are species only (eBird category "species"): no "sp.", hybrids or forms.
 // Data: eBird, Cornell Lab of Ornithology (https://ebird.org), used with credit.
 
@@ -28,10 +30,7 @@ const COUNTY_COUNTRIES = ['GB', 'FR', 'IE', 'ID'];     // where the map draws co
 const PACE = { start: 800, fastest: 600, slowest: 8000, pauseAfter429: 30000, giveUpAfter: 30 };
 const cacheFile = path.join(root, 'private', 'ebird-api-cache.json');
 
-if (!KEY) {
-  console.error('No key. Get a free one at https://ebird.org/api/keygen, then run:\n  EBIRD_API_KEY=your-key node tools/fetch-region-totals.js');
-  process.exit(1);
-}
+const NO_KEY = 'No key. Get a free one at https://ebird.org/api/keygen, then run:\n  EBIRD_API_KEY=your-key node tools/fetch-region-totals.js';
 
 let cache = {};
 try { cache = JSON.parse(fs.readFileSync(cacheFile, 'utf8')); } catch (e) { cache = {}; }
@@ -43,6 +42,7 @@ let gap = PACE.start, nextAt = 0, refusedInARow = 0, okInARow = 0;
 /** One API call, cached and paced. The key goes in a header, never the URL. */
 async function get(route) {
   if (cache[route] !== undefined) return cache[route];
+  if (!KEY) throw new Error(NO_KEY);           // only needed for answers not cached yet
   for (;;) {
     const wait = nextAt - Date.now();
     if (wait > 0) await sleep(wait);
@@ -93,12 +93,13 @@ async function main() {
   const countries = (await get('ref/region/list/country/world')).filter(c => !only || only.includes(c.code));
   console.log(countries.length + ' countries');
 
-  const regions = {}, counties = {};
+  const regions = {}, counties = {}, names = {};
   const sub1 = [];
   await eachLimited(countries, async c => {
+    names[c.code] = c.name;
     regions[c.code] = speciesIn(await get('product/spplist/' + c.code));
     const subs = (await get('ref/region/list/subnational1/' + c.code)) || [];
-    subs.forEach(s => sub1.push({ code: s.code, name: s.name, cc: c.code }));
+    subs.forEach(s => { names[s.code] = s.name; sub1.push({ code: s.code, name: s.name, cc: c.code }); });
   }, 'countries');
 
   await eachLimited(sub1, async s => { regions[s.code] = speciesIn(await get('product/spplist/' + s.code)); }, 'states and provinces');
@@ -119,6 +120,7 @@ async function main() {
     fetched: new Date().toISOString().slice(0, 10),
     regions: Object.assign({}, previous.regions, regions),     // a partial run adds to the last one
     counties: Object.assign({}, previous.counties, counties),
+    names: Object.assign({}, previous.names, names),          // "AU-VIC": "Victoria", for Ask your list
   };
   fs.writeFileSync(file, JSON.stringify(out));
   console.log('Saved ' + Object.keys(out.regions).length + ' regions and ' + Object.keys(out.counties).length +

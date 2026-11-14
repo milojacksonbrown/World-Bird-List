@@ -89,9 +89,11 @@ Sent to the AI: the unmatched eBird name and the shortlist names only.
 
 The AI doesn't answer the question. It translates it into a small, structured query, and the browser runs that query on the visitor's own data.
 
-1. The browser sends the question to Lyrebird, which adds a description of what can be searched: the tables (species, families, orders, countries, years, months), their fields, and the allowed comparisons, sorts and limits.
+1. The browser sends the question to Lyrebird, which adds a description of what can be searched: the tables (species, families, orders, countries, places, years, months), their fields, and the allowed comparisons, sorts and limits.
 2. Gemini replies with a query in a fixed JSON shape (its `responseSchema`), or "cannot" with a reason.
 3. The query is checked, in Lyrebird and again in the browser: every table, field and comparison must be on the allowed list, and values must be the right type. Anything else is rejected with a message.
+
+*Added later:* a **places** table (every state, province and county birded, with species, lifers, firsts, and the % of eBird's recorded species seen) and a `places` list on each species, so "which county…" and "what have I seen in Suffolk" can be answered. State names and totals come from `docs/data/region-totals.json`; without it, states show as codes and % seen is empty.
 
 *As built (session 4):* the allowed tables live in one place, `ASK_TABLES_` in `AskYourList.gs`, and the prompt, the checker and the plain-English description are all generated from it, so they can't disagree. Families and orders are worked out from the species rows when the query runs, so a region limit ("in Africa") changes their totals correctly. The query shape:
 

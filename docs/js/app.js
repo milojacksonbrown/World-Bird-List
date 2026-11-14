@@ -278,9 +278,10 @@
   let lastAsk = null;                  // { query, reason, backup } of the last answered question
   let askCache = null;                 // { d, data }: the tables for the file shown
 
-  function askTables() {
-    if (!askCache || askCache.d !== current.d || askCache.countries !== countries) {
-      askCache = { d: current.d, countries, data: askData_(current.d, checklist, countries) };
+  async function askTables() {
+    await loadTotals();                  // state names and eBird totals, for the places table
+    if (!askCache || askCache.d !== current.d || askCache.countries !== countries || askCache.totals !== regionTotals) {
+      askCache = { d: current.d, countries, totals: regionTotals, data: askData_(current.d, checklist, countries, regionTotals) };
     }
     return askCache.data;
   }
@@ -307,9 +308,11 @@
       birdIconSvg_(shape, 22) + '</span>' + words + '</span></td>';
   }
 
-  function renderAsk() {
+  async function renderAsk() {
     if (!lastAsk || !current) return;
-    const q = lastAsk.query, res = runQuery_(q, askTables());
+    const data = await askTables();
+    if (!lastAsk || !current) return;                    // cleared while the totals loaded
+    const q = lastAsk.query, res = runQuery_(q, data);
     const noun = ASK_TABLES_[q.table].noun[res.total === 1 ? 0 : 1];
     $('#ask-result').innerHTML =
       '<div class="understood"><span class="label">Understood as</span>' + esc(describeQuery_(q)) +
@@ -358,7 +361,7 @@
       error: 'Lyrebird couldn\'t answer just now.',
     }[ans.status];
     out.innerHTML = '<p class="ask-problem"><strong>' + esc(why) + '</strong> ' + esc(ans.reason) +
-      (ans.status === 'error' ? '' : '<br>Try asking about species, families, orders, countries, years or months.') + '</p>';
+      (ans.status === 'error' ? '' : '<br>Try asking about species, families, orders, countries, states and counties, years or months.') + '</p>';
     redrawTrail();
   }
 
@@ -502,6 +505,15 @@
     return f ? f.properties.NAME : cc;
   }
 
+  /** The totals file, fetched once: optional, so without it there are no % bars and states show as codes. */
+  let totalsLoading = null;
+  function loadTotals() {
+    totalsLoading = totalsLoading || fetch('data/region-totals.json')
+      .then(res => res.ok ? res.json() : null).catch(() => null)
+      .then(t => { regionTotals = t; $('#totals-credit').hidden = !t; });   // credit eBird whenever its totals are used
+    return totalsLoading;
+  }
+
   // ---------- Zooming into a country: its states, provinces or regions ----------
   async function openCountry(cc) {
     if (!map || !current) return;
@@ -512,11 +524,7 @@
       catch (e) { file = null; }
       regionFiles.set(cc, file);
     }
-    if (regionTotals === undefined) {               // the totals file is optional: without it, no % bars
-      try { const res = await fetch('data/region-totals.json'); regionTotals = res.ok ? await res.json() : null; }
-      catch (e) { regionTotals = null; }
-      $('#totals-credit').hidden = !regionTotals;            // credit eBird whenever its totals are used
-    }
+    await loadTotals();
     if (!zoomed || zoomed.cc !== cc) return;        // the visitor moved on while it loaded
     const { level, shapes, unmapped } = countryRegions_(file, current.d.stats, cc, regionTotals);
     // The country's own scale, so its regions differ from each other

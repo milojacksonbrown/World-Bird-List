@@ -211,8 +211,13 @@ test('region totals count birds that winter in or pass through a region, not onl
 test('species and lifers per state or province, from eBird\'s State/Province column', () => {
   const d = build();
   const st = JSON.parse(JSON.stringify(d.stats.states));
-  assert.deepEqual(st['GB-ENG'], { species: 1, lifers: 1 });     // Grey Heron
-  assert.deepEqual(st['ES-AN'], { species: 2, lifers: 2 });      // Osprey, Turtle Dove
+  const counts = p => ({ species: p.species, lifers: p.lifers });
+  assert.deepEqual(counts(st['GB-ENG']), { species: 1, lifers: 1 });     // Grey Heron
+  assert.deepEqual(counts(st['ES-AN']), { species: 2, lifers: 2 });      // Osprey, Turtle Dove
+  assert.ok(st['ES-AN'].firstVisit && st['ES-AN'].firstLifer !== null);    // firsts, as for countries
+  // and each species knows the states it was recorded in
+  const where = Object.values(JSON.parse(JSON.stringify(d.stats.species))).map(s => s.states);
+  assert.ok(where.some(s => s.includes('ES-AN')));
   const lifers = Object.values(st).reduce((n, s) => n + s.lifers, 0);
   assert.equal(lifers, d.totals.species);                        // every lifer is counted in exactly one region
 });
