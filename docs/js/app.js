@@ -617,11 +617,15 @@
   });
 
 
-  $('#file').addEventListener('change', e => {
-    const file = e.target.files[0];
+  /** Reads an eBird file chosen with the button or dropped on the page (in the browser: never uploaded). */
+  function readFile(file) {
     if (!file) return;
     if (/\.zip$/i.test(file.name)) {
       status('That\'s the .zip from eBird. Please unzip it first and upload the MyEBirdData.csv file inside.');
+      return;
+    }
+    if (!/\.csv$/i.test(file.name) && !/csv/.test(file.type)) {
+      status('That doesn\'t look like a .csv file. Please use the MyEBirdData.csv file from eBird.');
       return;
     }
     status('Reading ' + file.name + '…');
@@ -629,7 +633,42 @@
     reader.onload = () => show(reader.result, 'Your life list, from ' + file.name);
     reader.onerror = () => status('Sorry, that file could not be read.');
     reader.readAsText(file);
+  }
+
+  $('#file').addEventListener('change', e => {
+    readFile(e.target.files[0]);
     e.target.value = '';   // allow choosing the same file again
+  });
+
+  // Drag and drop: a file dragged anywhere over the page shows a drop target, and dropping it
+  // reads it like the button. Only once the page is ready (the buttons are showing).
+  // Counting enters and leaves, since moving over child elements fires both.
+  let dragDepth = 0;
+  const draggingFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+  const ready = () => !$('#controls').hidden;
+  const dropZone = on => { document.body.classList.toggle('dragging', on); if (!on) dragDepth = 0; };
+  window.addEventListener('dragenter', e => {
+    if (!draggingFiles(e) || !ready()) return;
+    e.preventDefault();
+    dragDepth++;
+    dropZone(true);
+  });
+  window.addEventListener('dragover', e => {
+    if (!draggingFiles(e)) return;
+    e.preventDefault();                          // without this the browser opens the file instead
+    e.dataTransfer.dropEffect = ready() ? 'copy' : 'none';
+  });
+  window.addEventListener('dragleave', e => {
+    if (!draggingFiles(e)) return;
+    if (--dragDepth <= 0) dropZone(false);
+  });
+  window.addEventListener('drop', e => {
+    if (!draggingFiles(e)) return;
+    e.preventDefault();
+    dropZone(false);
+    if (!ready()) return;
+    if (e.dataTransfer.files.length > 1) status('Please drop just one file: MyEBirdData.csv.');
+    else { readFile(e.dataTransfer.files[0]); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   });
 
   $('#sample').addEventListener('click', async () => {

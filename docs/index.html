@@ -29,6 +29,7 @@
         Upload MyEBirdData.csv
       </label>
       <button id="sample" class="button" type="button">Try with sample data</button>
+      <span class="drop-hint">or drag the file onto the page</span>
     </div>
     <p id="status" class="status" role="status" aria-live="polite"></p>
     <p id="source-label" class="source-label"></p>
@@ -41,6 +42,8 @@
       </ol>
     </details>
   </header>
+
+  <div class="drop-overlay" aria-hidden="true"><p>Drop your <strong>MyEBirdData.csv</strong> here<span>It's read in your browser and never uploaded.</span></p></div>
 
   <main id="dashboard" hidden>
 

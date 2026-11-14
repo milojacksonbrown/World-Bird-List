@@ -286,3 +286,17 @@ h1 {
   .world { grid-template-columns: 1fr; }
   .map { height: 280px; }
 }
+
+/* Drag and drop: a hint beside the buttons, and a drop target over the whole page while a file is dragged */
+.drop-hint { font-size: 0.85rem; color: var(--ink-soft); font-style: italic; align-self: center; }
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px;
+  background: rgba(244, 238, 226, 0.88); pointer-events: none;
+}
+.dragging .drop-overlay { display: flex; }
+.drop-overlay p {
+  margin: 0; padding: 40px 48px; max-width: 520px; text-align: center; background: var(--card);
+  border: 3px dashed var(--focus); border-radius: 14px; font-family: var(--serif); font-size: 1.5rem; color: var(--ink);
+}
+.drop-overlay span { display: block; margin-top: 8px; font-family: var(--sans); font-size: 0.95rem; color: var(--ink-soft); }
+@media (hover: none) { .drop-hint { display: none; } }   /* phones and tablets can't drag files in */
