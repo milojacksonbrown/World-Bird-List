@@ -128,7 +128,12 @@ h1 {
 .map-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 0.85rem; color: var(--ink-soft); }
 .map-legend .key { display: inline-flex; align-items: center; gap: 6px; }
 .map-legend .swatch { width: 14px; height: 14px; border: 1px solid var(--rule); display: inline-block; }
-.leaflet-tooltip { white-space: nowrap; }   /* one line each: lines are broken with <br> where meant */
+.leaflet-tooltip { white-space: nowrap; }
+/* Map shapes: no box around a clicked shape (the browser's focus ring, drawn round its bounding box);
+   instead the shape under the pointer has its own outline drawn in ink. Keyboard users have the
+   country buttons under the map, which keep the site's focus style. */
+.leaflet-interactive:focus { outline: none; }
+.leaflet-interactive:hover { stroke: var(--ink); stroke-width: 1.5px; stroke-opacity: 1; }   /* one line each: lines are broken with <br> where meant */
 .map-countries { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 10px; font-size: 0.88rem; color: var(--ink-soft); }
 .map-countries .chip {
   font: 0.86rem var(--sans); color: var(--ink); background: var(--card); cursor: pointer;
