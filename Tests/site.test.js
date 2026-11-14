@@ -17,5 +17,5 @@ FILES.forEach(src => {
 
 test('the sample data contains only the agreed columns', () => {
   const first = fs.readFileSync(path.join(__dirname, '..', 'docs', 'data', 'sample-ebird.csv'), 'utf8').split('\n')[0];
-  assert.equal(first, 'Submission ID,Common Name,Scientific Name,State/Province,Location ID,Location,Latitude,Longitude,Date,Time');
+  assert.equal(first, 'Submission ID,Common Name,Scientific Name,State/Province,County,Location ID,Location,Latitude,Longitude,Date,Time');
 });

@@ -127,6 +127,17 @@ h1 {
 .map-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 0.85rem; color: var(--ink-soft); }
 .map-legend .key { display: inline-flex; align-items: center; gap: 6px; }
 .map-legend .swatch { width: 14px; height: 14px; border: 1px solid var(--rule); display: inline-block; }
+.leaflet-tooltip { white-space: nowrap; }   /* one line each: lines are broken with <br> where meant */
+.map-countries { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 10px; font-size: 0.88rem; color: var(--ink-soft); }
+.map-countries .chip {
+  font: 0.86rem var(--sans); color: var(--ink); background: var(--card); cursor: pointer;
+  border: 1px solid var(--rule); border-radius: 14px; padding: 3px 10px;
+}
+.map-countries .chip:hover { border-color: var(--green-soft); }
+.region-bars .country-head { display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--rule); margin-bottom: 4px; }
+.region-bars .country-head .text-button { align-self: flex-start; padding-left: 0; }
+.region-bars .country-title { font: 600 1.25rem var(--serif); }
+.region-bars .note { font-size: 0.82rem; color: var(--ink-soft); font-style: italic; }
 .map-note { margin: 6px 0 0; font-size: 0.8rem; color: var(--ink-soft); font-style: italic; }
 
 .region-bars { list-style: none; margin: 0; padding: 0; }

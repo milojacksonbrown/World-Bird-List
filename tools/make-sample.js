@@ -19,7 +19,7 @@ const ctx = vm.createContext({});
 vm.runInContext(fs.readFileSync(path.join(root, 'LifeList.gs'), 'utf8'), ctx);
 const rows = vm.runInContext('parseCsvText_', ctx)(fs.readFileSync(file, 'utf8'));
 
-const KEEP = ['Submission ID', 'Common Name', 'Scientific Name', 'State/Province', 'Location ID', 'Location', 'Latitude', 'Longitude', 'Date', 'Time'];
+const KEEP = ['Submission ID', 'Common Name', 'Scientific Name', 'State/Province', 'County', 'Location ID', 'Location', 'Latitude', 'Longitude', 'Date', 'Time'];
 const idx = KEEP.map(h => rows[0].indexOf(h));
 const missing = KEEP.filter((h, i) => idx[i] < 0);
 if (missing.length) { console.error('Missing columns: ' + missing.join(', ')); process.exit(1); }

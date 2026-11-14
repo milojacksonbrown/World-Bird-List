@@ -19,6 +19,9 @@
 
   let checklist = null, matching = null, countries = null;
   let charts = [], map = null, countryLayer = null, countryShapes = null;
+  let stateLayer = null, zoomed = null;                 // zoomed: {cc, name} of the country whose regions are shown
+  const regionFiles = new Map();                        // cc -> its docs/data/regions file (null if it didn't load)
+  let regionTotals;                                     // species recorded per region, from eBird (tools/fetch-region-totals.js); null if absent
   let current = null;                  // { text, label, d }: the file shown, so fixes can recalculate it
 
   // Name fixes the visitor has accepted: eBird scientific name (lower case) -> AviList name or 'IGNORE'.
@@ -53,7 +56,7 @@
   }
 
   function show(text, label, keepPlace) {
-    if (!keepPlace) { $('#lifer-search').value = ''; lifersExpanded = false; lastAsk = null; }   // a new file starts fresh
+    if (!keepPlace) { $('#lifer-search').value = ''; lifersExpanded = false; lastAsk = null; zoomed = null; }   // a new file starts fresh
     try {
       const d = buildDashboard_(parseCsvText_(text), checklist, getFixes());
       current = { text, label, d };
@@ -455,6 +458,7 @@
       }
     }
     if (countryLayer) countryLayer.remove();
+    if (stateLayer) { stateLayer.remove(); stateLayer = null; }
     countryLayer = L.geoJSON(countryShapes, {
       style: f => ({
         fillColor: colour(shade(speciesIn.get(countryCode_(f.properties)))), fillOpacity: 1, color: css('--rule'), weight: 0.6,
@@ -462,8 +466,9 @@
       onEachFeature: (f, layer) => {
         const p = f.properties, region = regionForCountry_(p), r = byRegion.get(region);
         const n = speciesIn.get(countryCode_(p));
+        if (n) layer.on('click', () => openCountry(countryCode_(p)));          // zoom in to its regions
         layer.bindTooltip('<strong>' + esc(p.NAME) + '</strong><br>' +
-          (n ? num(n) + ' species recorded here' : 'Not birded yet') +
+          (n ? num(n) + ' species recorded here<br><em>Click to see its regions</em>' : 'Not birded yet') +
           (r ? '<br><span class="tip-region">' + esc(region) + ': ' + num(r.seen) + ' of ' + num(r.total) +
             ' regional species seen (' + pct(r.pct) + ')</span>' : ''), { sticky: true });
       },
@@ -474,10 +479,114 @@
       map._fittedWorld = true;
     }
 
-    $('#map-legend').innerHTML = '<span class="key"><span class="swatch" style="background:' + colour(0) + '"></span>not birded</span>' +
+    $('#map-legend').innerHTML = legendHtml(most);
+    // A button per birded country: another way in, for phones and keyboards
+    $('#map-countries').innerHTML = d.countries.length ? '<span class="lead">See the regions of:</span>' +
+      d.countries.map(c => '<button type="button" class="chip" data-cc="' + esc(c.code) + '">' + esc(countryName(c.code)) + '</button>').join('') : '';
+    if (zoomed) openCountry(zoomed.cc);              // redrawn after a change (e.g. a name fix): stay zoomed in
+  }
+
+  /** The legend: five shades on a square-root scale up to `most` species. */
+  function legendHtml(most) {
+    const colour = n => css(n ? '--map-' + n : '--map-none');
+    const upTo = k => Math.round(most * (k / 5) ** 2);
+    return '<span class="key"><span class="swatch" style="background:' + colour(0) + '"></span>not birded</span>' +
       [1, 2, 3, 4, 5].map(k => '<span class="key"><span class="swatch" style="background:' + colour(k) + '"></span>up to ' +
         num(Math.max(1, upTo(k))) + '</span>').join('') + '<span class="key">species</span>';
   }
+
+  /** A country's English name: from countries.json, else the map's own, else its code. */
+  function countryName(cc) {
+    if (countries && countries.byCode[cc]) return countries.byCode[cc].name;
+    const f = countryShapes && countryShapes.features.find(x => countryCode_(x.properties) === cc);
+    return f ? f.properties.NAME : cc;
+  }
+
+  // ---------- Zooming into a country: its states, provinces or regions ----------
+  async function openCountry(cc) {
+    if (!map || !current) return;
+    zoomed = { cc };
+    let file = regionFiles.get(cc);
+    if (file === undefined) {                       // fetched the first time, then kept
+      try { const res = await fetch('data/regions/' + cc + '.json'); file = res.ok ? await res.json() : null; }
+      catch (e) { file = null; }
+      regionFiles.set(cc, file);
+    }
+    if (regionTotals === undefined) {               // the totals file is optional: without it, no % bars
+      try { const res = await fetch('data/region-totals.json'); regionTotals = res.ok ? await res.json() : null; }
+      catch (e) { regionTotals = null; }
+      $('#totals-credit').hidden = !regionTotals;            // credit eBird whenever its totals are used
+    }
+    if (!zoomed || zoomed.cc !== cc) return;        // the visitor moved on while it loaded
+    const { level, shapes, unmapped } = countryRegions_(file, current.d.stats, cc, regionTotals);
+    // The country's own scale, so its regions differ from each other
+    const most = Math.max(0, ...shapes.map(s => s.species), ...unmapped.map(s => s.species));
+    const shade = n => (!n || !most) ? 0 : Math.max(1, Math.min(5, Math.ceil(Math.sqrt(n / most) * 5)));
+    const colour = n => css(n ? '--map-' + n : '--map-none');
+
+    countryLayer.setStyle(f => countryCode_(f.properties) === cc ? { fillOpacity: 0, opacity: 0 } : { fillOpacity: 0.35, opacity: 0.5 });
+    if (stateLayer) stateLayer.remove();
+    stateLayer = L.geoJSON({ type: 'FeatureCollection', features: shapes.map(s =>
+      ({ type: 'Feature', properties: s, geometry: { type: 'MultiPolygon', coordinates: s.polys } })) }, {
+      // A group (Sulawesi, Leinster...) is drawn as its parts: lines in its own colour, so it reads as one region
+      style: f => { const fill = colour(shade(f.properties.species));
+        // (a slightly thicker line also covers hairline gaps where simplified neighbours don't quite meet)
+        return { fillColor: fill, fillOpacity: 1, color: f.properties.group ? fill : css('--rule'), weight: f.properties.group ? 1.6 : 0.6 }; },
+      onEachFeature: (f, layer) => {
+        const s = f.properties;
+        layer.bindTooltip('<strong>' + esc(s.name) + '</strong><br>' + (s.species
+          ? num(s.species) + (s.total ? ' of ' + num(s.total) : '') + ' species · ' + num(s.lifers) + ' lifer' + (s.lifers === 1 ? '' : 's')
+          : 'Not birded yet' + (s.total ? ' · ' + num(s.total) + ' species recorded there' : '')), { sticky: true });
+      },
+    }).addTo(map);
+    // Fit the birded regions (the whole country if none are drawn)
+    const birded = L.featureGroup();
+    stateLayer.eachLayer(l => { if (l.feature.properties.species) birded.addLayer(L.geoJSON(l.feature)); });
+    const bounds = birded.getLayers().length ? birded.getBounds() : stateLayer.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [16, 16], maxZoom: 6 });
+
+    $('#map-legend').innerHTML = legendHtml(most);
+    renderCountryPanel(cc, level, shapes.filter(s => s.species).concat(unmapped.map(u => Object.assign({ unmapped: true }, u))));
+    redrawTrail();
+  }
+
+  /**
+   * Beside the map: the country's birded counties or regions, most species first, and a way back.
+   * Like the world bars, a bar shows the share of the species recorded there (eBird's total) you've seen;
+   * where no total is known there's no bar, so nothing looks complete that isn't.
+   */
+  function renderCountryPanel(cc, level, rows) {
+    rows.sort((a, b) => b.species - a.species);
+    const unit = level === 'counties' ? ['county', 'counties'] : ['region', 'regions'];
+    const anyTotals = rows.some(r => r.total);
+    $('#region-bars').innerHTML =
+      '<li class="country-head"><button type="button" class="text-button" data-act="world">← Back to world</button>' +
+        '<span class="country-title">' + esc(countryName(cc)) + '</span>' +
+        '<span class="note">' + num(rows.length) + ' ' + unit[rows.length === 1 ? 0 : 1] + ' birded. ' +
+        (anyTotals ? 'Bars show how many of the species ever recorded there (eBird) you\'ve seen.' : 'Shaded by species recorded.') + '</span></li>' +
+      rows.map(r => {
+        const pctSeen = r.total ? Math.min(1, r.species / r.total) : null;
+        return '<li><div class="row"><span class="name">' + esc(r.name) + (r.unmapped ? ' <span class="note">(not on the map)</span>' : '') + '</span>' +
+          '<span class="figs">' + num(r.species) + (r.total ? ' / ' + num(r.total) + ' · ' + pct(pctSeen) : ' species') +
+          ' · ' + num(r.lifers) + ' lifer' + (r.lifers === 1 ? '' : 's') + '</span></div>' +
+          (pctSeen === null ? '' : '<div class="track" aria-hidden="true"><div class="fill" style="width:' + (pctSeen * 100).toFixed(2) + '%"></div></div>') + '</li>';
+      }).join('');
+  }
+
+  function closeCountry() {
+    zoomed = null;
+    if (stateLayer) { stateLayer.remove(); stateLayer = null; }
+    renderRegions(current.d);
+    renderMap(current.d);
+    map.fitBounds([[-55, -168], [78, 180]]);
+    redrawTrail();
+  }
+
+  $('#region-bars').addEventListener('click', e => { if (e.target.closest('[data-act="world"]')) closeCountry(); });
+  $('#map-countries').addEventListener('click', e => {
+    const b = e.target.closest('button[data-cc]');
+    if (b) { openCountry(b.dataset.cc); $('#map').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  });
 
 
   $('#file').addEventListener('change', e => {

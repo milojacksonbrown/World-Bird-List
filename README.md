@@ -26,7 +26,7 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 ## What it does
 
 - **The count:** species, families, orders and countries seen, as a share of the world's living birds, plus threatened species (IUCN Vulnerable or worse).
-- **Where in the world:** a map of countries birded, shaded by species recorded, and bars showing how much of each region's breeding birds you've seen.
+- **Where in the world:** a map of countries birded, shaded by species recorded, and bars showing how much of each region's birds you've seen. Click a country to zoom into its states and provinces (counties in the UK, France, Ireland and Indonesia), shaded by species, with species, lifers and the % of the species eBird has recorded there.
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
 - **Latest lifers:** the first time each species was seen, with a search box and a field-guide silhouette of each bird's body shape (heron, wader, owl, finch…). All 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
 - **Names to check:** every eBird name that doesn't match AviList, with an AI-assisted suggestion you can accept, change or ignore.
@@ -146,7 +146,7 @@ Some things I learned along the way:
 | `Lyrebird/Lyrebird.gs` | The AI middleman web app |
 | `docs/js/bird-icons.js` | The body-shape silhouettes: which shape each family gets, and the numbers each shape is drawn from |
 | `docs/` | The website, served by GitHub Pages. `docs/lib/` holds generated copies of the shared `.gs` files |
-| `tools/` | Scripts run on my computer: convert AviList, copy shared code to the site, build country names, run the accuracy check |
+| `tools/` | Scripts run on my computer: convert AviList, copy shared code to the site, build country names and state/province outlines, fetch regional species totals from eBird, run the accuracy and coverage checks |
 | `Tests/` | Automated tests and accuracy results |
 
 ### Running it locally
@@ -168,6 +168,6 @@ Follow the instructions at the top of [`LifeList.gs`](LifeList.gs), or the [setu
 ## Credits
 
 - **Checklist:** AviList Core Team. 2026. *AviList: The Global Avian Checklist, v2026.* https://doi.org/10.2173/avilist.v2026. Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), and converted to a smaller format for this site.
-- **Sightings:** exported from [eBird](https://ebird.org) (Cornell Lab of Ornithology). This project isn't affiliated with eBird or AviList.
-- **Map:** country outlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain), drawn with [Leaflet](https://leafletjs.com/). **Charts:** [Chart.js](https://www.chartjs.org/).
+- **Sightings and regional species totals:** [eBird](https://ebird.org) (Cornell Lab of Ornithology). This project isn't affiliated with eBird or AviList.
+- **Map:** country and state/province outlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain), drawn with [Leaflet](https://leafletjs.com/). **Charts:** [Chart.js](https://www.chartjs.org/).
 - **AI:** OpenAI's GPT-OSS 120B on Groq, with Google Gemini as the backup, through Lyrebird.

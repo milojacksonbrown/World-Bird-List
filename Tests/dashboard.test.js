@@ -207,3 +207,50 @@ test('region totals count birds that winter in or pass through a region, not onl
   assert.equal(r(after)('Africa').total, before + 1);
   assert.equal(r(after)('Europe').total, r(build())('Europe').total);   // already breeds there: no double count
 });
+
+test('species and lifers per state or province, from eBird\'s State/Province column', () => {
+  const d = build();
+  const st = JSON.parse(JSON.stringify(d.stats.states));
+  assert.deepEqual(st['GB-ENG'], { species: 1, lifers: 1 });     // Grey Heron
+  assert.deepEqual(st['ES-AN'], { species: 2, lifers: 2 });      // Osprey, Turtle Dove
+  const lifers = Object.values(st).reduce((n, s) => n + s.lifers, 0);
+  assert.equal(lifers, d.totals.species);                        // every lifer is counted in exactly one region
+});
+
+test('zooming into a country draws regions at the level the sightings use', () => {
+  const file = { regions: {
+    'FR-69': { name: 'Rhône', polys: [] }, 'FR-75': { name: 'Paris', polys: [] },
+    'FR-ARA': { name: 'Auvergne-Rhône-Alpes', group: true, polys: [] }, 'FR-IDF': { name: 'Île-de-France', group: true, polys: [] },
+  } };
+  ctx.FILE = file;
+  const zoom = states => { ctx.ST = { states, counties: {} }; return JSON.parse(JSON.stringify(run('countryRegions_(FILE, ST, "FR")'))); };
+  // eBird used a region code: draw the regions, with counts
+  const byRegion = zoom({ 'FR-ARA': { species: 4, lifers: 4 }, 'GB-ENG': { species: 9, lifers: 9 } });
+  assert.deepEqual(byRegion.shapes.map(s => [s.code, s.species]), [['FR-ARA', 4], ['FR-IDF', 0]]);
+  assert.deepEqual(byRegion.unmapped, []);
+  // eBird used département codes: draw the départements
+  assert.deepEqual(zoom({ 'FR-75': { species: 2, lifers: 1 } }).shapes.map(s => s.code), ['FR-69', 'FR-75']);
+  // a code with no outline is still listed
+  assert.deepEqual(zoom({ 'FR-ZZ': { species: 3, lifers: 1 } }).unmapped, [{ code: 'FR-ZZ', name: 'FR-ZZ', species: 3, lifers: 1, total: null }]);
+  // no file (it didn't load): nothing drawn, everything listed
+  ctx.FILE = null;
+  assert.equal(zoom({ 'FR-ARA': { species: 4, lifers: 4 } }).unmapped.length, 1);
+});
+
+test('zooming into the UK draws counties, matched by name within each nation, with eBird totals', () => {
+  ctx.GBFILE = { regions: {
+    'GB-ENG': { name: 'England', group: true, polys: [] }, 'GB-WLS': { name: 'Wales', group: true, polys: [] },
+    'GB-LND': { name: 'London', in: 'GB-ENG', polys: [] }, 'GB-NYK': { name: 'North Yorkshire', in: 'GB-ENG', polys: [] },
+    'GB-GWN': { name: 'Gwynedd', in: 'GB-WLS', polys: [] },
+  } };
+  ctx.GBSTATS = {
+    states: { 'GB-ENG': { species: 80, lifers: 60 }, 'GB-WLS': { species: 1, lifers: 1 } },
+    counties: { 'GB-ENG|London': { species: 76, lifers: 45 }, 'GB-ENG|north yorkshire': { species: 54, lifers: 31 },
+                'GB-ENG|West Midlands': { species: 3, lifers: 1 }, 'GB-WLS|Gwynedd': { species: 1, lifers: 1 } },
+  };
+  ctx.TOTALS = { regions: { 'GB-ENG': 600 }, counties: { 'GB-ENG|London': 350 } };
+  const z = JSON.parse(JSON.stringify(run('countryRegions_(GBFILE, GBSTATS, "GB", TOTALS)')));
+  assert.equal(z.level, 'counties');
+  assert.deepEqual(z.shapes.map(s => [s.code, s.species, s.total]), [['GB-LND', 76, 350], ['GB-NYK', 54, null], ['GB-GWN', 1, null]]);
+  assert.deepEqual(z.unmapped.map(u => [u.name, u.species]), [['West Midlands', 3]]);   // no single outline: still listed
+});

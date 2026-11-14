@@ -51,11 +51,12 @@
 
     <section class="plate" aria-labelledby="world-title">
       <h2 id="world-title">Where in the world</h2>
-      <p class="caption">The countries you've birded in, shaded by how many species you've recorded there. The bars show how many of the birds regularly found in each region (breeding, wintering or on migration) you've seen, wherever you saw them. Rare vagrants aren't included. Tap or hover over a country for details.</p>
+      <p class="caption">The countries you've birded in, shaded by how many species you've recorded there. The bars show how many of the birds regularly found in each region (breeding, wintering or on migration) you've seen, wherever you saw them. Rare vagrants aren't included. Tap or hover over a country for details, and click a birded country to see its states and provinces.</p>
       <div class="world">
         <div class="map-wrap">
           <div id="map" class="map" role="img" aria-label="World map of the countries birded in, shaded by the number of species recorded in each. Region figures are listed beside it."></div>
           <div id="map-legend" class="map-legend"></div>
+          <div id="map-countries" class="map-countries"></div>
           <p class="map-note">For the region figures, each country belongs to one region; countries spanning two (Russia, Egypt, Indonesia) go by continent.</p>
         </div>
         <ul id="region-bars" class="region-bars"></ul>
@@ -128,6 +129,7 @@
 
   <footer class="colophon">
     <p id="citation"></p>
+    <p id="totals-credit" hidden>Species totals for states, provinces and counties: <a href="https://ebird.org">eBird</a> (Cornell Lab of Ornithology).</p>
     <p>Your eBird file is read in your browser and is never uploaded. Not affiliated with eBird or AviList.</p>
   </footer>
 

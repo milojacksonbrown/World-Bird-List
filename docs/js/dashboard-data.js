@@ -120,20 +120,25 @@ function activityByDate_(rows, index) {
  * the lifer list does (resolveEbirdName_), and ordering by date and time as
  * summariseEbird_ does, so the "first" here agrees with the lifer list.
  * @return {{species: Object<number,{checklists:number, firstCountry:string}>,
- *           countries: Object<string,{firstVisit:Date, firstSpecies:number, lifers:number, firstLifer:?number, firstLiferDate:?Date}>}}
+ *           countries: Object<string,{firstVisit:Date, firstSpecies:number, lifers:number, firstLifer:?number, firstLiferDate:?Date}>,
+ *           states: Object<string,{species:number, lifers:number}>,     states: eBird's State/Province codes, e.g. AU-VIC
+ *           counties: Object<string,{species:number, lifers:number}>}}  counties: "GB-ENG|North Yorkshire" (state code | County column)
  *   Keyed by species number and two-letter country code. (Counts of individual
  *   birds aren't used: most records are eBird's "X", seen but not counted.)
  */
 function speciesStats_(rows, index) {
-  const out = { species: {}, countries: {} };
+  const out = { species: {}, countries: {}, states: {}, counties: {} };
   if (!rows || rows.length < 2) return out;
   const H = rows[0].map(h => String(h).trim().toLowerCase());
   const col = {
     sci: H.indexOf('scientific name'), common: H.indexOf('common name'), date: H.indexOf('date'),
-    time: H.indexOf('time'), state: H.indexOf('state/province'), sub: H.indexOf('submission id'),
+    time: H.indexOf('time'), state: H.indexOf('state/province'), sub: H.indexOf('submission id'), county: H.indexOf('county'),
   };
   if (col.sci < 0) return out;
-  const subs = {}, firstOf = {};       // species -> Set of checklists; species -> earliest {key, date, cc}
+  const subs = {}, firstOf = {};       // species -> Set of checklists; species -> earliest {key, date, cc, state}
+  const stateSp = {};                  // state code (e.g. AU-VIC) -> Set of species
+  const countySp = {};                 // "GB-ENG|North Yorkshire" -> Set of species
+  const states = out.states;
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     const sci = String(r[col.sci] || '').trim();
@@ -144,21 +149,31 @@ function speciesStats_(rows, index) {
     const st = out.species[t] || (out.species[t] = { checklists: 0, firstCountry: '' });
     const sub = col.sub >= 0 ? String(r[col.sub] || '').trim() : '';
     (subs[t] = subs[t] || new Set()).add(sub || 'row' + i);
+    const state = String(col.state >= 0 ? r[col.state] : '').trim().toUpperCase();
+    const county = col.county >= 0 ? String(r[col.county] || '').trim() : '';
+    if (/^[A-Z]{2}-[A-Z0-9]+$/.test(state)) {
+      (stateSp[state] = stateSp[state] || new Set()).add(t);
+      if (county) (countySp[state + '|' + county] = countySp[state + '|' + county] || new Set()).add(t);
+    }
     const date = col.date >= 0 ? parseEbirdDate_(r[col.date]) : null;
     if (!date) continue;
     const key = date.getTime() + parseEbirdTime_(col.time >= 0 ? r[col.time] : '') * 60000;
-    const cc = String(col.state >= 0 ? r[col.state] : '').trim().toUpperCase().split('-')[0];
-    if (!firstOf[t] || key < firstOf[t].key) firstOf[t] = { key, date, cc };
+    const cc = state.split('-')[0];
+    if (!firstOf[t] || key < firstOf[t].key) firstOf[t] = { key, date, cc, state, county };
     if (/^[A-Z]{2}$/.test(cc)) {
       const c = out.countries[cc] || (out.countries[cc] = { key: Infinity, firstVisit: null, firstSpecies: null, lifers: 0, firstLifer: null, firstLiferDate: null, liferKey: Infinity });
       if (key < c.key) { c.key = key; c.firstVisit = date; c.firstSpecies = t; }
     }
   }
+  Object.keys(stateSp).forEach(code => { states[code] = { species: stateSp[code].size, lifers: 0 }; });
+  Object.keys(countySp).forEach(k => { out.counties[k] = { species: countySp[k].size, lifers: 0 }; });
   Object.keys(out.species).forEach(t => {
     out.species[t].checklists = subs[t].size;
     const f = firstOf[t];
     if (!f) return;
     out.species[t].firstCountry = /^[A-Z]{2}$/.test(f.cc) ? f.cc : '';
+    if (out.states[f.state]) out.states[f.state].lifers++;   // and in this state or province
+    if (f.county && out.counties[f.state + '|' + f.county]) out.counties[f.state + '|' + f.county].lifers++;
     const c = out.countries[f.cc];                   // the lifer was gained in this country
     if (!c) return;
     c.lifers++;
@@ -166,6 +181,63 @@ function speciesStats_(rows, index) {
   });
   Object.values(out.countries).forEach(c => { delete c.key; delete c.liferKey; });
   return out;
+}
+
+/**
+ * What to draw when the map zooms into one country, at the finest level the
+ * visitor's data and the outlines both support:
+ *   - counties, where eBird's State/Province codes are groups (the UK's
+ *     nations, France's regions, Ireland's provinces, Indonesia's island
+ *     groups) and the file has the parts: eBird's County column is matched to
+ *     the parts by name, within each group (so "London" is London, England)
+ *   - otherwise states or provinces, by code (AU-VIC, TH-50)
+ * Each row carries the region's species total from eBird, when known.
+ * @param {Object} file      a docs/data/regions/<CC>.json, or null if it didn't load
+ * @param {Object} stats     from speciesStats_: {states, counties}
+ * @param {string} cc        the country's two-letter code
+ * @param {Object} [totals]  docs/data/region-totals.json: {regions: {code: n}, counties: {"GB-ENG|North Yorkshire": n}}
+ * @return {{level: 'counties'|'regions', shapes: Array<{code, name, polys, group, species, lifers, total}>,
+ *           unmapped: Array<{code, name, species, lifers, total}>}}  unmapped: birded places with no outline
+ */
+function countryRegions_(file, stats, cc, totals) {
+  const regions = (file && file.regions) || {};
+  const states = (stats && stats.states) || {}, counties = (stats && stats.counties) || {};
+  const T = totals || {}, regionTotal = code => (T.regions && T.regions[code]) || null;
+  const countyTotal = key => (T.counties && T.counties[key]) || null;
+  const mine = Object.keys(states).filter(code => code.slice(0, 3) === cc + '-');
+  const useGroups = mine.some(code => regions[code] && regions[code].group);
+  const tidy = n => String(n).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').trim();
+  const myCounties = Object.keys(counties).filter(k => k.slice(0, 3) === cc + '-');
+  const parts = Object.keys(regions).filter(code => regions[code].in);
+
+  if (useGroups && parts.length && myCounties.length) {
+    const byName = new Map(parts.map(code => [regions[code].in + '|' + tidy(regions[code].name), code]));
+    const used = new Set();
+    const shapes = parts.map(code => {
+      const r = regions[code], key = Object.keys(counties).find(k => k.split('|')[0] === r.in && tidy(k.split('|')[1]) === tidy(r.name));
+      if (key) used.add(key);
+      const c = key ? counties[key] : null;
+      return { code, name: r.name, polys: r.polys, group: !!r.whole, species: c ? c.species : 0, lifers: c ? c.lifers : 0,
+               total: key ? countyTotal(key) : null };
+    });
+    const unmapped = myCounties.filter(k => !used.has(k) && !byName.has(k.split('|')[0] + '|' + tidy(k.split('|')[1])))
+      .map(k => ({ code: k, name: k.split('|')[1], species: counties[k].species, lifers: counties[k].lifers, total: countyTotal(k) }));
+    // Birding recorded only at the State/Province level (no County) is listed too
+    mine.forEach(code => {
+      const inCounties = myCounties.filter(k => k.split('|')[0] === code).length;
+      if (!inCounties) unmapped.push({ code, name: regions[code] ? regions[code].name : code, species: states[code].species, lifers: states[code].lifers, total: regionTotal(code) });
+    });
+    return { level: 'counties', shapes, unmapped };
+  }
+
+  const shapes = Object.keys(regions).filter(code => !!regions[code].group === useGroups).map(code => ({
+      code, name: regions[code].name, polys: regions[code].polys, group: !!regions[code].group,
+      species: states[code] ? states[code].species : 0, lifers: states[code] ? states[code].lifers : 0, total: regionTotal(code),
+    }));
+  const drawn = new Set(shapes.map(s => s.code));
+  const unmapped = mine.filter(code => !drawn.has(code))
+    .map(code => ({ code, name: code, species: states[code].species, lifers: states[code].lifers, total: regionTotal(code) }));
+  return { level: 'regions', shapes, unmapped };
 }
 
 // ---------------------------------------------------------------------------
