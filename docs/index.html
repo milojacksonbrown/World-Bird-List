@@ -29,7 +29,14 @@
         Upload MyEBirdData.csv
       </label>
       <button id="sample" class="button" type="button">Try with sample data</button>
-      <span class="drop-hint">or drag the file onto the page</span>
+      <label class="dropzone" for="file">
+        <svg class="dropzone-icon" viewBox="0 0 48 48" aria-hidden="true">
+          <path d="M15 4h13l7 7v15" /><path d="M28 4v7h7" /><path d="M15 4v22" />
+          <path d="M24 15v17m-6-6 6 6 6-6" />
+          <path d="M6 30v10a3 3 0 0 0 3 3h30a3 3 0 0 0 3-3V30" /><path d="M6 30h9l3 5h12l3-5h9" />
+        </svg>
+        <span class="dropzone-text"><strong>Drag MyEBirdData.csv here</strong> <span>or click to choose it</span></span>
+      </label>
     </div>
     <p id="status" class="status" role="status" aria-live="polite"></p>
     <p id="source-label" class="source-label"></p>

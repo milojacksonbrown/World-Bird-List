@@ -66,7 +66,8 @@ h1 {
 }
 .lede { max-width: 36em; margin: 0 auto 24px; color: var(--ink-soft); }
 
-.controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.controls { display: grid; grid-template-columns: auto auto; gap: 12px; justify-content: center; }
+.controls[hidden] { display: none; }
 .button {
   display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
   padding: 10px 18px; border-radius: 4px; border: 1.5px solid var(--green);
@@ -288,7 +289,16 @@ h1 {
 }
 
 /* Drag and drop: a hint beside the buttons, and a drop target over the whole page while a file is dragged */
-.drop-hint { font-size: 0.85rem; color: var(--ink-soft); font-style: italic; align-self: center; }
+/* The drop box under the buttons: drag a file onto it (or anywhere), or click it to choose one */
+.dropzone {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 16px;
+  padding: 14px 20px; border: 2px dashed var(--green-soft); border-radius: 12px; background: rgba(251, 248, 241, 0.7);
+  color: var(--ink); cursor: pointer; text-align: left; transition: background 0.15s, border-color 0.15s;
+}
+.dropzone:hover, .dragging .dropzone { background: var(--card); border-style: solid; }
+.dropzone-icon { width: 44px; height: 44px; flex: none; fill: none; stroke: var(--green-soft); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.dropzone-text strong { display: block; font-family: var(--serif); font-size: 1.1rem; color: var(--green); }
+.dropzone-text span { font-size: 0.9rem; color: var(--ink-soft); }
 .drop-overlay {
   position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px;
   background: rgba(244, 238, 226, 0.88); pointer-events: none;
@@ -299,4 +309,4 @@ h1 {
   border: 3px dashed var(--focus); border-radius: 14px; font-family: var(--serif); font-size: 1.5rem; color: var(--ink);
 }
 .drop-overlay span { display: block; margin-top: 8px; font-family: var(--sans); font-size: 0.95rem; color: var(--ink-soft); }
-@media (hover: none) { .drop-hint { display: none; } }   /* phones and tablets can't drag files in */
+@media (hover: none) { .dropzone { display: none; } }   /* phones and tablets can't drag files in; the Upload button does the job */
