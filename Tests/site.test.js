@@ -22,7 +22,7 @@ test('the sample data contains only the agreed columns', () => {
 
 test('the page scripts have no syntax errors (they aren\'t loaded by any other test)', () => {
   const { execFileSync } = require('node:child_process');
-  for (const f of ['docs/js/app.js', 'docs/js/config.js', 'docs/js/habitat-icons.js', 'docs/js/bird-icons.js']) {
+  for (const f of ['docs/js/app.js', 'docs/js/config.js', 'docs/js/habitat-icons.js', 'docs/js/nest-icons.js', 'docs/js/bird-icons.js']) {
     execFileSync(process.execPath, ['--check', path.join(__dirname, '..', f)]);      // throws on a syntax error
   }
 });

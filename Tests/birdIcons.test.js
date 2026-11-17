@@ -73,3 +73,15 @@ test('every habitat in the trait data has a drawing, and drawings are well forme
   assert.match(svg, /^<svg class="habitat-icon"[^>]*width="20"[^>]*>.*<\/svg>$/);
   assert.equal(vm.runInContext('habitatIconSvg_("Moon", 20)', hctx), '');
 });
+
+test('every nest type in the trait data has a drawing, except "No nest" and "Other bird\'s nest"', () => {
+  const nctx = vm.createContext({});
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'docs', 'js', 'nest-icons.js'), 'utf8'), nctx, { filename: 'nest-icons.js' });
+  const ICONS = vm.runInContext('NEST_ICONS_', nctx);
+  const traits = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'data', 'traits.json'), 'utf8'));
+  const NONE = ['No nest', "Other bird's nest"];
+  const missing = traits.values.nest.filter(n => !ICONS[n] && !NONE.includes(n));
+  assert.deepEqual(missing, [], 'nest types with no drawing: ' + missing.join(', '));
+  NONE.forEach(n => assert.equal(vm.runInContext('nestIconSvg_(' + JSON.stringify(n) + ', 20)', nctx), ''));
+  assert.match(vm.runInContext('nestIconSvg_("Cup", 20)', nctx), /^<svg class="nest-icon"[^>]*width="20"[^>]*>.*<\/svg>$/);
+});

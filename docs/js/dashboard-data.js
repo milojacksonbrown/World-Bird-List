@@ -963,3 +963,21 @@ function quizCheck_(typed, sp, checklist) {
   }
   return { correct: false, note: '' };
 }
+
+// ---------- Size comparison: an estimate of the bird's length ----------
+// None of the datasets give a bird's length (beak tip to tail tip, as field guides quote it), so
+// it's estimated: beak + tail + a body length from weight (body length grows with the cube root
+// of weight). Long-necked shapes get more. Calibrated on 28 birds of known length: median error
+// 6%, worst 22% (Mute Swan, too short). Shown as an estimate, never as a measurement.
+const LENGTH_K_ = 30.75;                                       // mm of body per cube-root gram
+const NECK_ = { heron: 1.75, crane: 1.6, flamingo: 2.1, cormorant: 1.5, diver: 1.3, duck: 1.3 };
+
+/**
+ * @param {Object} t  the species' traits (mass in g, beak and tail in mm)
+ * @param {string} shape  its body shape (birdShape_ in bird-icons.js)
+ * @return {number|null}  estimated length in mm, or null without a weight
+ */
+function estimateLength_(t, shape) {
+  if (!t || !(t.mass > 0)) return null;
+  return Math.round((t.beak || 0) + (t.tail || 0) + LENGTH_K_ * (NECK_[shape] || 1) * Math.cbrt(t.mass));
+}

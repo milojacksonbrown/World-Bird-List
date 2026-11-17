@@ -194,7 +194,8 @@
     const row = data.species.find(r => r.scientific === sp.sci);
     const lifer = current.d.lifers.find(l => l.sci === sp.sci);
     const f = factFile_(sp, row, { lifer, range: ranges[sp.sci] || '', stickers });
-    $('#factfile-body').innerHTML = factFileHtml(f);
+    $('#factfile-body').innerHTML = factFileHtml(f, row);
+    fitFactFileBird(f, row);
     const st = current.d.stats && current.d.stats.species && current.d.stats.species[sp.i];
     drawRangeMap(sp, st && st.points ? [...st.points.values()] : []);
   }
@@ -254,11 +255,92 @@
     }
   }
 
-  function factFileHtml(f) {
+  /** Nest types, each with its drawing (nest-icons.js) where it has one. */
+  const nestWithIcons = types => types.map(t => '<span class="with-nest">' +
+    (NEST_ICONS_[t] ? '<span class="icon nest" title="' + esc(NEST_ICONS_[t].label) + '">' + nestIconSvg_(t, 20) + '</span>' : '') + esc(t) + '</span>');
+
+  // ---------- Size comparison: the bird beside a person, or beside a hand if it's small ----------
+  const PERSON_MM = 1750, HAND_MM = 190;
+  const PERSON = '<circle cx="30" cy="11" r="9.5"/><path d="M19 24c5-2.5 17-2.5 22 0 3 1.2 4.6 3.8 5 7l4 30c.4 3.2-3.6 4.2-4.6 1.2L41 37v24l-1.6 63c-.1 3.4-6.8 3.4-7 0L30.6 74h-1.2l-1.8 50c-.2 3.4-6.9 3.4-7 0L19 61V37l-4.4 25.2c-1 3-5 2-4.6-1.2l4-30c.4-3.2 2-5.8 5-7Z"/>';     // 128 tall
+  // An open hand, palm on, fingers spread a little (one smooth outline): about 100 wide, 128 tall
+  const HAND = '<path d="M36 128 C27 126 21 116 19 104 C17 96 12 86 7 77 C2 68 -2 60 1 55 C4 50 9 51 12 56 C16 63 21 72 25 79 C27 82 29 80 30 74 L17.6 19.6 A6.6 6.6 0 0 1 30.4 16.4 L43 62 Q44.5 65 46 60 L43.2 6.4 A6.8 6.8 0 0 1 56.8 5.6 L60 59 Q61.5 63 63 60 L69.6 13.1 A6.5 6.5 0 0 1 82.4 14.9 L76 63 Q77.5 67 79 64 L89.2 27.4 A6 6 0 0 1 100.8 30.6 L91 68 C92 80 92 98 88 111 C83 122 73 128 60 128 C50 128 43 129 36 128Z"/>';
+
+  // Where the bird is inside a sticker (the pictures have transparent space around the bird), as
+  // fractions of the picture: { l, t, r, b }. Measured once per bird from its small thumbnail.
+  const birdBoxes = new Map();
+  function birdBox(thumb) {
+    if (!birdBoxes.has(thumb)) {
+      birdBoxes.set(thumb, new Promise(done => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const n = img.naturalWidth, m = img.naturalHeight, c = document.createElement('canvas');
+            c.width = n; c.height = m;
+            const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+            const a = g.getImageData(0, 0, n, m).data;
+            let l = n, r = -1, t = m, b = -1;
+            for (let y = 0; y < m; y++) for (let x = 0; x < n; x++) {
+              if (a[(y * n + x) * 4 + 3] > 24) { if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > b) b = y; }
+            }
+            done(r < 0 ? null : { l: l / n, t: t / m, r: (r + 1) / n, b: (b + 1) / m, aspect: m / n });   // aspect: the picture's height ÷ width
+          } catch (e) { done(null); }
+        };
+        img.onerror = () => done(null);
+        img.src = thumb;
+      }));
+    }
+    return birdBoxes.get(thumb);
+  }
+
+  // The size comparison. box: where the bird is in its picture (birdBox), so its feet can stand on
+  // the ground line and its length can be measured from the bird, not the picture.
+  function sizeComparison(f, row, box) {
+    const len = estimateLength_(row, birdShape_(f.familyLatin, f.order));
+    if (!len || !f.sticker) return '';
+    const bb = box || { l: 0.1, t: 0.1, r: 0.9, b: 0.95, aspect: 1 };   // a guess until it's measured
+    const small = len <= 200, refMm = small ? HAND_MM : PERSON_MM, H = 150;   // a hand only for birds of 20 cm or less
+    const px = H / refMm;                                      // pixels per millimetre
+    const w = Math.max(6, len * px / Math.max(0.2, bb.r - bb.l));   // picture width that makes the bird itself to scale
+    const h = w * bb.aspect;                                   // the pictures aren't square
+    const inset = small ? Math.round(5 * H / 128) : 0;        // room for the hand's thumb, which reaches left
+    const refW = (small ? 103 : 64) * H / 128 + inset;
+    const tall = Math.max(H, (bb.b - bb.t) * h), ground = tall + 4;   // room for whichever is taller, so nothing is cut off
+    const birdX = refW + 14 - bb.l * w, birdY = ground - bb.b * h;   // the bird's feet on the ground line
+    const cm = len >= 1000 ? (len / 1000).toFixed(1).replace(/\.0$/, '') + ' m' : Math.round(len / 10) + ' cm';
+    // Just the picture: the length is in its label for screen readers, and in a tooltip
+    return '<figure class="ff-size" title="About ' + esc(cm) + ' long (estimated)">' +
+      '<svg viewBox="0 ' + Math.round(ground - tall - 2) + ' ' + Math.round(refW + 18 + Math.max((bb.r - bb.l) * w, 40)) + ' ' + Math.round(tall + 6) + '" preserveAspectRatio="xMinYMax meet"' +
+        ' role="img" aria-label="' + esc(f.common) + ', about ' + esc(cm) + ' long, to scale beside ' + (small ? 'a hand' : 'a person') + '">' +
+        '<g class="ref" transform="translate(' + inset + ' ' + Math.round(ground - H) + ') scale(' + (H / 128).toFixed(3) + ')">' + (small ? HAND : PERSON) + '</g>' +
+        '<image href="' + esc(f.sticker.full) + '" x="' + birdX.toFixed(1) + '" y="' + birdY.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '"/>' +
+        '<line class="ground" x1="0" x2="100%" y1="' + ground + '" y2="' + ground + '"/>' +
+      '</svg></figure>';
+  }
+
+  // Once the bird's place in its picture is measured: redraw the size comparison with its feet on
+  // the line, and lift the fact file's picture so the bird's head lines up with its name
+  async function fitFactFileBird(f, row) {
+    if (!f.sticker) return;
+    const box = await birdBox(f.sticker.thumb);
+    const body = $('#factfile-body');
+    if (!box || !body || !body.querySelector('#factfile-title') || $('#factfile-title').textContent !== f.common) return;   // another bird is open
+    const size = body.querySelector('.ff-size');
+    if (size) size.outerHTML = sizeComparison(f, row, box);
+    const pic = body.querySelector('.ff-picture img');
+    if (pic) {
+      const h = pic.getBoundingClientRect().height || 260;
+      pic.style.marginTop = -Math.round(box.t * h) + 'px';
+      pic.style.marginBottom = -Math.round((1 - box.b) * h) + 'px';
+    }
+  }
+
+  function factFileHtml(f, row) {
     const list = (title, facts) => facts.length ? '<section class="ff-block"><h3>' + esc(title) + '</h3><dl>' +
       facts.map(x => '<div><dt>' + esc(x.label) + '</dt><dd>' +
-        (x.label === 'Main habitat' && HABITAT_ICONS_[x.value] ? '<span class="icon habitat">' + habitatIconSvg_(x.value, 20) + '</span>' : '') +
-        esc(x.value) + (x.source ? ' <span class="src">' + esc(x.source) + '</span>' : '') + '</dd></div>').join('') + '</dl></section>' : '';
+        (x.label === 'Main habitat' && HABITAT_ICONS_[x.value] ? '<span class="icon habitat">' + habitatIconSvg_(x.value, 20) + '</span>' + esc(x.value)
+          : x.label === 'Nest' ? nestWithIcons(x.value.split(' or ')).join(' <span class="or">or</span> ')
+            : esc(x.value)) +
+        (x.source ? ' <span class="src">' + esc(x.source) + '</span>' : '') + '</dd></div>').join('') + '</dl></section>' : '';
     const rec = f.records;
     const records = rec
       ? '<section class="ff-block ff-mine"><h3>Your records</h3><dl>' +
@@ -288,7 +370,7 @@
         '<ul class="ff-legend"><li><span class="sw june"></span>Recorded in June–July</li><li><span class="sw december"></span>December–January</li>' +
         '<li><span class="sw both"></span>Both</li>' + (f.seen ? '<li><span class="sw mine"></span>Your sightings</li>' : '') + '</ul>' +
         '<p id="ff-map-credit" class="ff-credit"></p></section>' +
-      '<div class="ff-grid">' + list('Size', f.size) + list('Life', f.life) + '</div>' +
+      '<div class="ff-grid"><div>' + list('Size', f.size) + sizeComparison(f, row) + '</div>' + list('Life', f.life) + '</div>' +
       records +
       (f.links.length ? '<p class="ff-links">More: ' + f.links.map(l => '<a href="' + esc(l.url) + '">' + esc(l.label) + '</a>').join(' · ') + '</p>' : '');
   }
@@ -612,6 +694,7 @@
     const latin = ['scientific', 'familyLatin', 'order'].includes(col.field);
     const words = latin ? '<span class="sci">' + esc(text) + '</span>' : esc(text);
     if (col.field === 'iucn') return '<td>' + iucnBadge(v) + '</td>';
+    if (col.field === 'nest') return '<td>' + nestWithIcons(v).join(' ') + '</td>';     // each nest type with its drawing
     // Habitats get a small drawing (habitat-icons.js)
     if (col.field === 'habitat' && HABITAT_ICONS_[v]) {
       return '<td><span class="with-icon"><span class="icon habitat" title="' + esc(HABITAT_ICONS_[v].label) + '">' +

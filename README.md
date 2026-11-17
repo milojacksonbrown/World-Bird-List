@@ -32,9 +32,9 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 - **Latest lifers:** the first time each species was seen, newest first (the latest 10, then 50, 100 or all, with Show fewer at the top and bottom), with a search box and an illustrated sticker of each bird. Where a species has no sticker, a field-guide silhouette of its body shape (heron, wader, owl, finch…) stands in: all 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
 - **Test yourself:** a quiz on your own lifers. A sticker appears and you name the bird, choosing from four names or typing it. In *hard* mode the wrong answers are lookalikes from the same family (woodswallows against butcherbirds); typed answers accept any of the bird's names, American spellings, the scientific name, the name without its first word ("Bullfinch") when no other bird has that name, and small spelling slips (one letter in eight). Ten birds a round, with the ones you missed to look at again and your best score kept in your browser.
 - **Your birds around the page:** once your file loads, 25 of your lifers, picked at random each time, appear as stickers around the title, down the margins and by the footer, in fixed places chosen never to cover the text. Click one for its fact file.
-- **Fact files:** click any bird, in the lifer list or an answer, for its fact file: a large illustration, AviList's description of where it lives, a seasonal range map, its IUCN status (colour-coded, green for Least Concern through to red for Critically Endangered), size and life history (each fact labelled with its source), your own records, and links to eBird and Bird Album.
+- **Fact files:** click any bird, in the lifer list or an answer, for its fact file: a large illustration, AviList's description of where it lives, a seasonal range map, its IUCN status (colour-coded, green for Least Concern through to red for Critically Endangered), a size comparison (the bird to scale beside a person, or a hand if it's 20 cm or less), size and life history (each fact labelled with its source), your own records, and links to eBird and Bird Album.
 - **Names to check:** every eBird name that doesn't match AviList, with an AI-assisted suggestion you can accept, change or ignore.
-- **Ask your list:** questions in plain English, answered from your own data, with the same silhouettes beside species, families and orders. It goes down to states, provinces and counties too: *Which county have I seen the most species in? What have I seen in Suffolk? My first lifer in each Australian state?* And it knows each bird's size, range, habitat, diet, altitude, eggs and nest, from two scientific datasets: *What's the heaviest bird I've seen? Which of my birds have the smallest ranges? What nectar feeders have I seen?* Each habitat in an answer gets a small line drawing (forest, wetland, coast, desert…).
+- **Ask your list:** questions in plain English, answered from your own data, with the same silhouettes beside species, families and orders. It goes down to states, provinces and counties too: *Which county have I seen the most species in? What have I seen in Suffolk? My first lifer in each Australian state?* And it knows each bird's size, range, habitat, diet, altitude, eggs and nest, from two scientific datasets: *What's the heaviest bird I've seen? Which of my birds have the smallest ranges? What nectar feeders have I seen?* Each habitat and nest type gets a small line drawing (forest, wetland, coast…; cup, burrow, pendant…).
 
 ![The map zoomed into the United Kingdom: counties shaded by species seen, beside bars such as London 76 of 382 species (19.9%) and North Yorkshire 54 of 408 (13.2%)](docs/screenshot-uk-counties.png)
 
@@ -102,6 +102,8 @@ Every bird has an illustrated sticker from [huashu-bird-sticker](https://github.
 - For common birds, cells with only a handful of records are left out, so one stray doesn't look like part of the range. The map is framed on the middle 95% of the cells, not of the records: counting records centred the bullfinch on Europe, where most birdwatchers are, and cut off its range across Asia to Japan.
 - These are *records*, not a modelled range: well-watched places look fuller than remote ones, and introduced and escaped birds appear too (Java Sparrow shows up on four continents).
 
+**Size comparisons, from an estimate.** None of the datasets give a bird's length (beak tip to tail tip), so the fact file estimates it: beak + tail + a body length from weight (which grows with the cube root of weight), with more for long-necked shapes such as herons, swans and flamingos. On 28 birds of known length it's typically within 6%; the worst is the Mute Swan, 22% short. The bird's sticker is drawn to scale beside a person, or beside a hand for birds of 20 cm or less. Each sticker is measured (where the bird sits in its transparent picture, and the picture's real shape) so the bird stands on the line and its own length, not the picture's, is to scale.
+
 ## Bird traits: two scientific datasets, combined carefully
 
 "Ask your list" can answer questions about size, range, habitat and diet because every species is joined to two published, peer-reviewed datasets (both CC BY 4.0):
@@ -118,7 +120,7 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
 
 ## Testing
 
-- **139 automated tests** (`node --test`) cover:
+- **140 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers
@@ -192,6 +194,7 @@ Some things I learned along the way:
 | `Lyrebird/Lyrebird.gs` | The AI middleman web app |
 | `tools/build-traits.js` | Joins AVONET and BIRDBASE to AviList (weight, range, habitat, diet, nests…) and writes the coverage report |
 | `tools/build-factfiles.js` | Builds the sticker thumbnails, the sticker index and AviList's range text for the fact files |
+| `docs/js/nest-icons.js` | A line drawing for each of BIRDBASE's nest types (none for "No nest" or "Other bird's nest") |
 | `docs/js/habitat-icons.js` | A line drawing for each of BIRDBASE's 14 main habitats, shown beside habitats in answers |
 | `docs/js/bird-icons.js` | The body-shape silhouettes: which shape each family gets, and the numbers each shape is drawn from |
 | `docs/` | The website, served by GitHub Pages. `docs/lib/` holds generated copies of the shared `.gs` files |
