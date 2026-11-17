@@ -1,0 +1,275 @@
+{
+ "source": "IOC World Bird List v15.2 (multilingual), Gill, F., D. Donsker & P. Rasmussen (Eds), CC BY 3.0, via huashu-bird-sticker",
+ "languages": [
+  {
+   "code": "af",
+   "english": "Afrikaans",
+   "native": "Afrikaans",
+   "names": 966
+  },
+  {
+   "code": "ar",
+   "english": "Arabic",
+   "native": "العربية",
+   "names": 575
+  },
+  {
+   "code": "be",
+   "english": "Belarusian",
+   "native": "Беларуская",
+   "names": 319
+  },
+  {
+   "code": "bg",
+   "english": "Bulgarian",
+   "native": "Български",
+   "names": 1392
+  },
+  {
+   "code": "ca",
+   "english": "Catalan",
+   "native": "Català",
+   "names": 9999
+  },
+  {
+   "code": "zh-Hans",
+   "english": "Chinese",
+   "native": "简体中文",
+   "names": 10947
+  },
+  {
+   "code": "zh-Hant",
+   "english": "Chinese (Traditional)",
+   "native": "繁體中文",
+   "names": 10375
+  },
+  {
+   "code": "hr",
+   "english": "Croatian",
+   "native": "Hrvatski",
+   "names": 10502
+  },
+  {
+   "code": "cs",
+   "english": "Czech",
+   "native": "Čeština",
+   "names": 10050
+  },
+  {
+   "code": "da",
+   "english": "Danish",
+   "native": "Dansk",
+   "names": 10814
+  },
+  {
+   "code": "nl",
+   "english": "Dutch",
+   "native": "Nederlands",
+   "names": 10858
+  },
+  {
+   "code": "eo",
+   "english": "Esperanto",
+   "native": "Esperanto",
+   "names": 10858
+  },
+  {
+   "code": "et",
+   "english": "Estonian",
+   "native": "Eesti",
+   "names": 5563
+  },
+  {
+   "code": "fi",
+   "english": "Finnish",
+   "native": "Suomi",
+   "names": 9923
+  },
+  {
+   "code": "fr",
+   "english": "French",
+   "native": "Français",
+   "names": 10873
+  },
+  {
+   "code": "fr-x-gaudin",
+   "english": "French (Gaudin)",
+   "native": "Français (Gaudin)",
+   "names": 10852
+  },
+  {
+   "code": "de",
+   "english": "German",
+   "native": "Deutsch",
+   "names": 10661
+  },
+  {
+   "code": "el",
+   "english": "Greek",
+   "native": "Ελληνικά",
+   "names": 500
+  },
+  {
+   "code": "he",
+   "english": "Hebrew",
+   "native": "עברית",
+   "names": 1129
+  },
+  {
+   "code": "hu",
+   "english": "Hungarian",
+   "native": "Magyar",
+   "names": 6389
+  },
+  {
+   "code": "is",
+   "english": "Icelandic",
+   "native": "Íslenska",
+   "names": 950
+  },
+  {
+   "code": "id-ID",
+   "english": "id-ID",
+   "native": "Bahasa Indonesia",
+   "names": 1934
+  },
+  {
+   "code": "it",
+   "english": "Italian",
+   "native": "Italiano",
+   "names": 9908
+  },
+  {
+   "code": "ja",
+   "english": "Japanese",
+   "native": "日本語",
+   "names": 10418
+  },
+  {
+   "code": "ko",
+   "english": "Korean",
+   "native": "한국어",
+   "names": 554
+  },
+  {
+   "code": "lv",
+   "english": "Latvian",
+   "native": "Latviešu",
+   "names": 1979
+  },
+  {
+   "code": "lt",
+   "english": "Lithuanian",
+   "native": "Lietuvių",
+   "names": 9787
+  },
+  {
+   "code": "mk",
+   "english": "Macedonian",
+   "native": "Македонски",
+   "names": 378
+  },
+  {
+   "code": "ml",
+   "english": "Malayalam",
+   "native": "മലയാളം",
+   "names": 532
+  },
+  {
+   "code": "se",
+   "english": "Northern Sami",
+   "native": "Davvisámegiella",
+   "names": 930
+  },
+  {
+   "code": "no",
+   "english": "Norwegian",
+   "native": "Norsk",
+   "names": 10850
+  },
+  {
+   "code": "fa",
+   "english": "Persian",
+   "native": "فارسی",
+   "names": 537
+  },
+  {
+   "code": "pl",
+   "english": "Polish",
+   "native": "Polski",
+   "names": 10814
+  },
+  {
+   "code": "pt-x-lusophone",
+   "english": "Portuguese (Lusophone)",
+   "native": "Português (Brasil)",
+   "names": 10857
+  },
+  {
+   "code": "pt-PT",
+   "english": "Portuguese (Portuguese)",
+   "native": "Português (Portugal)",
+   "names": 10713
+  },
+  {
+   "code": "ro",
+   "english": "Romanian",
+   "native": "Română",
+   "names": 404
+  },
+  {
+   "code": "ru",
+   "english": "Russian",
+   "native": "Русский",
+   "names": 10455
+  },
+  {
+   "code": "sr",
+   "english": "Serbian",
+   "native": "Српски",
+   "names": 7912
+  },
+  {
+   "code": "sk",
+   "english": "Slovak",
+   "native": "Slovenčina",
+   "names": 10882
+  },
+  {
+   "code": "sl",
+   "english": "Slovenian",
+   "native": "Slovenščina",
+   "names": 1084
+  },
+  {
+   "code": "es",
+   "english": "Spanish",
+   "native": "Español",
+   "names": 10716
+  },
+  {
+   "code": "sv",
+   "english": "Swedish",
+   "native": "Svenska",
+   "names": 10858
+  },
+  {
+   "code": "th",
+   "english": "Thai",
+   "native": "ไทย",
+   "names": 993
+  },
+  {
+   "code": "tr",
+   "english": "Turkish",
+   "native": "Türkçe",
+   "names": 10447
+  },
+  {
+   "code": "uk",
+   "english": "Ukrainian",
+   "native": "Українська",
+   "names": 10626
+  }
+ ]
+}

@@ -622,7 +622,7 @@ function factFile_(sp, row, extra) {
   const lifer = e.lifer || null;
   const clean = list => list.filter(Boolean);
   return {
-    common: sp.common, sci: sp.sci,
+    i: sp.i, common: sp.common, sci: sp.sci,
     family: sp.familyEn || sp.family, familyLatin: sp.family, order: sp.order,
     iucn, iucnName: IUCN_NAMES_[iucn] || '', threatened: THREATENED_.test(sp.iucn || ''),
     sticker: stickerFor_(sp, e.stickers),
@@ -948,10 +948,11 @@ function editDistance_(a, b) {
  * @param {Object} checklist  for the names of every species (byCommon)
  * @return {{correct: boolean, note: string}}  note: what was forgiven, if anything
  */
-function quizCheck_(typed, sp, checklist) {
+function quizCheck_(typed, sp, checklist, otherNames) {
   const t = quizName_(typed);
   if (!t) return { correct: false, note: '' };
-  const names = [sp.common].concat(String(sp.alt || '').split(';')).map(s => s.trim()).filter(Boolean);
+  // otherNames: the bird's name in the language chosen on the page (e.g. "Bouvreuil pivoine"), which counts too
+  const names = [sp.common].concat(String(sp.alt || '').split(';'), otherNames || []).map(s => String(s).trim()).filter(Boolean);
   const sci = String(sp.sci).toLowerCase();
   if (names.some(n => quizName_(n) === t) || String(typed).trim().toLowerCase().replace(/\s+/g, ' ') === sci) return { correct: true, note: '' };
   for (const n of names) {

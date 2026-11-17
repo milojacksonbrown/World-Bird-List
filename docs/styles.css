@@ -535,3 +535,13 @@ html { scroll-behavior: smooth; }
 .ask-table .with-nest { display: flex; }   /* one nest type per line in answers, lined up */
 .ask-table .with-nest + .with-nest { margin-top: 4px; }
 .ff-block .not-recorded { color: var(--ink-soft); font-style: italic; }
+
+/* ---------- bird names in other languages ---------- */
+.names-lang { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; font-size: 0.88rem; color: var(--ink-soft); }
+.names-lang[hidden] { display: none; }
+.names-lang select { font: 0.88rem var(--sans); padding: 3px 6px; border: 1px solid var(--rule); border-radius: 12px; background: var(--card); color: var(--ink); max-width: 13em; }
+.local-name { color: var(--green-soft); font-size: 0.92em; }
+.lifers .local-name::before, .ask-table .local-name::before { content: "· "; color: var(--ink-soft); }
+.ff-local { margin: 2px 0 0 !important; font-family: var(--serif); font-size: 1.2rem; color: var(--green-soft); }
+.quiz-local { display: block; font-weight: 400; font-size: 0.85rem; color: inherit; opacity: 0.8; }
+.quiz-option { flex-direction: column; gap: 0; }

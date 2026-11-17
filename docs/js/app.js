@@ -136,7 +136,7 @@
   function liferItem(l) {
     return '<li><span class="date">' + esc(date(l.date)) + '</span>' +
       '<span class="who">' + birdIcon(l.sci, l.familyLatin, l.order, 30) +
-        '<span>' + birdButton(l.sci, '<span class="name">' + esc(l.common) + '</span>') + ' <span class="sci">' + esc(l.sci) + '</span></span></span>' +
+        '<span>' + birdButton(l.sci, '<span class="name">' + esc(l.common) + '</span>') + localNameHtml(l.i) + ' <span class="sci">' + esc(l.sci) + '</span></span></span>' +
       // Link only real eBird checklist IDs ("S123…"); the sample data's are made up
       '<span class="where">' + (/^S\d+$/.test(l.checklist)
         ? '<a href="https://ebird.org/checklist/' + encodeURIComponent(l.checklist) + '">' + esc(l.place || 'eBird checklist') + '</a>'
@@ -176,6 +176,42 @@
     // after collapsing a long list, bring the section back into view
     if (v === 'fewer') $('#lifers-title').scrollIntoView({ block: 'nearest' });
   });
+
+  // ---------- Bird names in other languages (IOC World Bird List, via huashu-bird-sticker) ----------
+  // Pick a language and every bird's name in it is shown beside the English one: in the lifer
+  // list, answers, fact files and the quiz (where typed answers in it count too). One small file
+  // per language (docs/data/names/), fetched when chosen; the choice is kept in this browser.
+  const NAMES_KEY = 'lifelist.namesLang';
+  const names = { lang: '', label: '', list: null, langs: [] };
+  const localName = i => (names.list && i !== undefined && i !== null && names.list[i]) || '';
+  const localNameHtml = i => (localName(i) ? ' <span class="local-name" lang="' + esc(names.lang) + '">' + esc(localName(i)) + '</span>' : '');
+  async function setNamesLang(code) {
+    const l = names.langs.find(x => x.code === code);
+    if (!l) { Object.assign(names, { lang: '', label: '', list: null }); }
+    else {
+      try {
+        const res = await fetch('data/names/' + encodeURIComponent(code) + '.json');
+        const data = await res.json();
+        if (data.count !== checklist.species.length) throw new Error('names file out of date');
+        Object.assign(names, { lang: code, label: l.english, list: data.names });
+      } catch (e) { status('Sorry, the ' + l.english + ' names could not be loaded (' + e.message + ').'); return; }
+    }
+    try { localStorage.setItem(NAMES_KEY, names.lang); } catch (e) { /* not remembered */ }
+    $('#names-lang').value = names.lang;
+    if (current) { renderLifers(); renderAsk(); }
+    if ($('#factfile').open && factOpener) openFactFile(factOpener.dataset.sci, factOpener);
+  }
+  fetch('data/names/languages.json').then(r => (r.ok ? r.json() : null)).then(data => {
+    if (!data) return;
+    names.langs = data.languages;
+    $('#names-lang').insertAdjacentHTML('beforeend', data.languages.map(l =>
+      '<option value="' + esc(l.code) + '">' + esc(l.english) + (l.native && l.native !== l.english ? ' · ' + esc(l.native) : '') + '</option>').join(''));
+    $('.names-lang').hidden = false;
+    let saved = '';
+    try { saved = localStorage.getItem(NAMES_KEY) || ''; } catch (e) { /* none */ }
+    if (saved) setNamesLang(saved);
+  }).catch(() => {});
+  $('#names-lang').addEventListener('change', e => setNamesLang(e.target.value));
 
   // ---------- Fact files: click a bird for everything known about it ----------
   let rangesLoading = null;
@@ -362,7 +398,9 @@
               ' · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>'
           : '<div class="ff-none">' + birdIconSvg_(birdShape_(f.familyLatin, f.order), 96) + '<p class="ai-note">No illustration for this species.</p></div>') +
         '</figure>' +
-        '<div class="ff-head"><h2 id="factfile-title">' + esc(f.common) + '</h2><p class="sci">' + esc(f.sci) + '</p>' +
+        '<div class="ff-head"><h2 id="factfile-title">' + esc(f.common) + '</h2>' +
+          (localName(f.i) ? '<p class="ff-local" lang="' + esc(names.lang) + '">' + esc(localName(f.i)) + ' <span class="src">' + esc(names.label) + '</span></p>' : '') +
+          '<p class="sci">' + esc(f.sci) + '</p>' +
           '<p class="ff-family">' + esc(f.family) + ' · <span class="sci">' + esc(f.familyLatin) + '</span> · ' + esc(f.order) + '</p>' +
           (f.iucn ? '<p class="ff-iucn">' + iucnBadge(f.iucn) + ' ' + esc(f.iucnName) + ' <span class="src">IUCN Red List</span></p>' : '') +
           (f.tags.length ? '<p class="ff-tags">' + f.tags.map(t => '<span class="tag">' + esc(t) + '</span>').join('') + '</p>' : '') +
@@ -448,7 +486,8 @@
       '<p class="quiz-ask">What\'s this bird?</p>' +
       (quiz.mode === 'choice'
         ? '<div class="quiz-options">' + quiz.options.map((o, n) =>
-            '<button type="button" class="button quiz-option" data-n="' + n + '">' + esc(o.common) + '</button>').join('') + '</div>'
+            '<button type="button" class="button quiz-option" data-n="' + n + '">' + esc(o.common) +
+              (localName(o.i) ? '<span class="quiz-local" lang="' + esc(names.lang) + '">' + esc(localName(o.i)) + '</span>' : '') + '</button>').join('') + '</div>'
         : '<form class="quiz-typed" autocomplete="off"><label for="quiz-input" class="visually-hidden">The bird\'s name</label>' +
           '<input id="quiz-input" type="text" maxlength="80" placeholder="e.g. Eurasian Bullfinch">' +
           '<button type="submit" class="button primary">Check</button>' +
@@ -514,7 +553,7 @@
     if (!quiz || quiz.answered) return;
     const typed = $('#quiz-input').value;
     if (!typed.trim()) return;
-    const res = quizCheck_(typed, quiz.birds[quiz.i], checklist);
+    const res = quizCheck_(typed, quiz.birds[quiz.i], checklist, localName(quiz.birds[quiz.i].i) ? [localName(quiz.birds[quiz.i].i)] : []);
     quizAnswer(res.correct, res.note);
   });
 
@@ -706,7 +745,7 @@
     if (!kind) return '<td' + cls + '>' + words + '</td>';
     // Species rows: the bird's sticker, and its name opens the fact file. Families and orders: a silhouette.
     return '<td' + cls + '><span class="with-icon">' + birdIcon(kind.sci, kind.familyLatin, kind.order, 28) +
-      (kind.sci ? birdButton(kind.sci, words) : words) + '</span></td>';
+      (kind.sci ? birdButton(kind.sci, words) + localNameHtml(checklist.bySci.get(String(kind.sci).toLowerCase())) : words) + '</span></td>';
   }
 
   async function renderAsk() {

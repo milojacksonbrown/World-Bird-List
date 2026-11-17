@@ -72,3 +72,12 @@ test('the quiz asks only about lifers that have a sticker', () => {
   ctx.ST = { cdn: 'x/', none: ['Ardea cinerea'] };
   assert.deepEqual(plain(run('quizPool_(LIF, CL, ST)')).map(s => s.sci), ['Pyrrhula pyrrhula']);
 });
+
+test('typed answers: the bird\'s name in the language chosen on the page counts too', () => {
+  ctx.QUIZ_SP = sp('Pyrrhula pyrrhula');
+  ctx.QUIZ_OTHER = ['Bouvreuil pivoine'];
+  const typed = t => { ctx.QUIZ_TYPED = t; return plain(run('quizCheck_(QUIZ_TYPED, QUIZ_SP, CL, QUIZ_OTHER)')); };
+  assert.deepEqual(typed('bouvreuil pivoine'), { correct: true, note: '' });
+  assert.equal(typed('Bouvreuil pivione').correct, true);            // a slip, forgiven
+  assert.equal(typed('Pinson des arbres').correct, false);           // a different bird
+});

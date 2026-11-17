@@ -25,6 +25,7 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 
 ## What it does
 
+- **Bird names in 45 languages:** pick a language in the section bar and every bird's name in it appears beside the English one, in the lifer list, answers, fact files and the quiz (where typed answers in that language count too). From the IOC World Bird List's multilingual edition; species whose boundaries changed recently between IOC and AviList have English only.
 - **Section buttons** at the top of the results jump to each part of the page; on wider screens they stay at the top of the window as you scroll, with the section you're reading highlighted.
 - **The count:** species, families, orders and countries seen, as a share of the world's living birds, plus threatened species (IUCN Vulnerable or worse).
 - **Where in the world:** a map of countries birded, shaded by the % of the species recorded there (eBird) that you've seen, and bars showing how much of each region's birds you've seen. Click a country to zoom into its states and provinces (counties in the UK, France, Ireland and Indonesia), shaded the same way, with species, lifers and the % of the species eBird has recorded there.
@@ -120,7 +121,7 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
 
 ## Testing
 
-- **140 automated tests** (`node --test`) cover:
+- **144 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers
@@ -193,6 +194,7 @@ Some things I learned along the way:
 | `AskYourList.gs` | The question tool: allowed tables, prompt, query checker, runner and description (shared) |
 | `Lyrebird/Lyrebird.gs` | The AI middleman web app |
 | `tools/build-traits.js` | Joins AVONET and BIRDBASE to AviList (weight, range, habitat, diet, nests…) and writes the coverage report |
+| `tools/build-names.js` | Builds one file of bird names per language (45) for the language picker |
 | `tools/build-factfiles.js` | Builds the sticker thumbnails, the sticker index and AviList's range text for the fact files |
 | `docs/js/nest-icons.js` | A line drawing for each of BIRDBASE's nest types (none for "No nest" or "Other bird's nest") |
 | `docs/js/habitat-icons.js` | A line drawing for each of BIRDBASE's 14 main habitats, shown beside habitats in answers |
@@ -222,6 +224,7 @@ Follow the instructions at the top of [`LifeList.gs`](LifeList.gs), or the [setu
 - **Checklist:** AviList Core Team. 2026. *AviList: The Global Avian Checklist, v2026.* https://doi.org/10.2173/avilist.v2026. Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), and converted to a smaller format for this site.
 - **Sightings and regional species totals:** [eBird](https://ebird.org) (Cornell Lab of Ornithology). This project isn't affiliated with eBird or AviList.
 - **Map:** country and state/province outlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain), drawn with [Leaflet](https://leafletjs.com/). **Charts:** [Chart.js](https://www.chartjs.org/).
+- **Bird names in other languages:** IOC World Bird List v15.2, multilingual edition (Gill, F., D. Donsker & P. Rasmussen, Eds), CC BY 3.0, via huashu-bird-sticker. One file per language (`tools/build-names.js`), loaded only when chosen.
 - **Range maps:** occurrence records from [GBIF.org](https://www.gbif.org), including eBird, fetched when a fact file opens.
 - **Bird illustrations:** [huashu-bird-sticker](https://github.com/alchaincyf/huashu-bird-sticker) v2.3.6 by Huashu (Bird Album), CC BY 4.0. AI-generated; resized for the icons.
 - **Bird traits:** AVONET (Tobias, J.A. et al. 2022, *Ecology Letters* 25: 581–597, https://doi.org/10.1111/ele.13898) and BIRDBASE v2025.1 (Şekercioğlu, Ç.H. et al. 2025, *Scientific Data*, https://doi.org/10.1038/s41597-025-05615-3), both CC BY 4.0, joined to AviList and converted to a smaller format.

@@ -180,3 +180,16 @@ test('sightings are kept per species, rounded to about 10 km, for the map', () =
   const st = run('speciesStats_(ROWS, IDX)').species[heron];
   assert.deepEqual(plain([...st.points.values()]), [[51.5, -0.1]]);    // two nearby records, one point; the bad one ignored
 });
+
+test('names in other languages: one file per language, in AviList order, with the picker list', () => {
+  const avilist = data('avilist.json');
+  const langs = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'data', 'names', 'languages.json'), 'utf8'));
+  assert.ok(langs.languages.length >= 40);
+  assert.match(langs.source, /IOC World Bird List/);
+  const bull = avilist.species.findIndex(s => s[0] === 'Pyrrhula pyrrhula');
+  for (const [code, name] of [['fr', 'Bouvreuil pivoine'], ['de', 'Gimpel'], ['es', 'Camachuelo común']]) {
+    const f = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'data', 'names', code + '.json'), 'utf8'));
+    assert.equal(f.count, avilist.species.length, code + ' is out of step with avilist.json: rebuild with tools/build-names.js');
+    assert.equal(f.names[bull], name);
+  }
+});
