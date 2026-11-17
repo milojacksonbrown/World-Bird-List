@@ -92,7 +92,7 @@ const ASK_TABLES_ = {
       clutchMax: ['number', 'Eggs (max)', 'largest usual clutch, in eggs'],
       nest: ['list', 'Nest', 'Cup, Tree cavity, Dome, Sphere, Platform, Scrape, Burrow, Pendant, Half cup, Saucer, Mound, Crevice, No nest or Other bird\'s nest'],
     },
-    show: ['common', 'scientific', 'family', 'firstSeen', 'firstPlace'],
+    show: ['common', 'scientific', 'family', 'habitat', 'firstSeen', 'firstPlace'],   // habitat always, with its drawing
     sort: ['firstSeen', 'desc'],
   },
   families: {

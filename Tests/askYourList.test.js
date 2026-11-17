@@ -165,7 +165,7 @@ test('species I\'ve seen, newest first, with my first sighting', () => {
   assert.equal(r.total, 3);
   assert.deepEqual(col(r, 'common'), ['Osprey', 'European Turtle Dove', 'Grey Heron']);   // same day: AviList order
   assert.deepEqual(col(r, 'firstSeen'), ['2024-07-02', '2024-07-02', '2022-03-10']);
-  assert.deepEqual(r.columns.map(c => c.field), ['common', 'scientific', 'family', 'firstSeen', 'firstPlace']);   // no "Seen: Yes" column
+  assert.deepEqual(r.columns.map(c => c.field), ['common', 'scientific', 'family', 'habitat', 'firstSeen', 'firstPlace']);   // no "Seen: Yes" column
 });
 
 test('species not seen leave out extinct ones; "Worldwide" species count in every land region', () => {
