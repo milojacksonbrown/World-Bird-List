@@ -1234,6 +1234,7 @@
     const nHead = HEAD_PLACES.length, nFoot = FOOT_PLACES.length;
     const step = (footTop - headBottom - size) / SCATTER_BODY;
     box.style.height = pageBottom + 'px';
+    const headPlaced = [];                                       // where the title-card stickers landed, for the hint
     box.innerHTML = birds.map((b, i) => {
       const rnd = seeded('place ' + i);                           // the place's own numbers: the same every load
       const part = i < nHead ? 'head' : i < nHead + nFoot ? 'foot' : 'body';
@@ -1250,6 +1251,7 @@
         const spot = part === 'head' ? placeSpot(HEAD_PLACES[i], s, top) : placeSpot(FOOT_PLACES[i - nHead], s, footTop);
         if (!spot) return '';
         [x, y] = spot;
+        if (part === 'head') headPlaced.push({ x, y, s });
       }
       const turn = Math.round((rnd() * 2 - 1) * 14);
       const st = stickerFor_(checklist.species[b.i], stickers);
@@ -1257,8 +1259,51 @@
       return '<button type="button" class="scatter-sticker bird-link' + (fresh ? ' pop' : '') + '" data-sci="' + esc(b.sci) + '" tabindex="-1"' +
         ' title="' + esc(b.common) + '" style="left:' + Math.round(x) + 'px;top:' + Math.round(y) + 'px;width:' + s + 'px;height:' + s + 'px;--turn:' + turn + 'deg;animation-delay:' + (i * 60) + 'ms">' +
         '<img src="' + esc(st.thumb) + '" alt="" width="' + s + '" height="' + s + '"></button>';
-    }).join('');
+    }).join('') + stickerHint(headPlaced, routePts, clear, width);
   }
+
+  // A hint that the stickers can be clicked: "click me" and a dotted arrow pointing at the
+  // leftmost sticker by the title (where eyes usually land first). The label goes on whichever
+  // side of the bird is clear of text, other stickers and the dotted route. Shown until a sticker
+  // is first clicked, then never again (in this browser).
+  const HINT_KEY = 'lifelist.stickerClicked';
+  const hintDone = () => { try { return localStorage.getItem(HINT_KEY) === '1'; } catch (e) { return false; } };
+  function stickerHint(placed, routePts, clear, width) {
+    if (!placed.length || hintDone()) return '';
+    const p = placed.reduce((a, b) => (b.x < a.x ? b : a));
+    const cx = p.x + p.s / 2, cy = p.y + p.s / 2, W = 74, H = 24;      // the bird's centre; the label's size
+    const awayFromRoute = (x, y) => routePts.every(([rx, ry]) => Math.hypot(rx - x, ry - y) > 14);
+    // Where the label could go, nearest first: below, below-right, right, above, below-left
+    const options = [[cx - W / 2, p.y + p.s + 34], [p.x + p.s * 0.75, p.y + p.s + 26], [p.x + p.s + 30, cy - H / 2],
+      [cx - W / 2, p.y - H - 34], [p.x - W - 6, p.y + p.s + 26]];
+    for (const [lx, ly] of options) {
+      if (lx < 6 || lx + W > width - 6 || !clear(lx, ly, Math.max(W, H), 6)) continue;
+      // The arrow: from the label's nearest edge to just outside the bird, bowed a little
+      const ax = Math.max(lx, Math.min(lx + W, cx)), ay = ly + H / 2 < cy ? ly + H : ly + H / 2 > cy + p.s / 2 ? ly : ly + H / 2;
+      const d = Math.hypot(cx - ax, cy - ay), ux = (cx - ax) / d, uy = (cy - ay) / d;
+      const bx = cx - ux * p.s * 0.48, by = cy - uy * p.s * 0.48;      // stop at the bird's edge
+      const mx = (ax + bx) / 2 - uy * 12, my = (ay + by) / 2 + ux * 12;
+      const label = [[lx, ly], [lx + W, ly], [lx, ly + H], [lx + W, ly + H], [lx + W / 2, ly + H / 2]];
+      const arrow = [0.25, 0.5, 0.75, 1].map(t => [(1 - t) ** 2 * ax + 2 * (1 - t) * t * mx + t * t * bx, (1 - t) ** 2 * ay + 2 * (1 - t) * t * my + t * t * by]);
+      if (!label.concat(arrow).every(([x, y]) => awayFromRoute(x, y))) continue;   // keep off the red dotted line
+      // Arrowhead: two short strokes back from the tip
+      const hx = bx - mx, hy = by - my, hl = Math.hypot(hx, hy) || 1;
+      const head = [28, -28].map(deg => {
+        const r = deg * Math.PI / 180, vx = -hx / hl, vy = -hy / hl;
+        return 'M' + bx.toFixed(1) + ' ' + by.toFixed(1) + 'l' + (8 * (vx * Math.cos(r) - vy * Math.sin(r))).toFixed(1) + ' ' + (8 * (vx * Math.sin(r) + vy * Math.cos(r))).toFixed(1);
+      }).join('');
+      return '<svg class="sticker-hint-arrow" aria-hidden="true" style="left:0;top:0" width="1" height="1">' +
+          '<path class="hint-line" d="M' + ax.toFixed(1) + ' ' + ay.toFixed(1) + 'Q' + mx.toFixed(1) + ' ' + my.toFixed(1) + ' ' + bx.toFixed(1) + ' ' + by.toFixed(1) + '"/>' +
+          '<path class="hint-head" d="' + head + '"/></svg>' +
+        '<div class="sticker-hint" style="left:' + Math.round(lx) + 'px;top:' + Math.round(ly) + 'px;width:' + W + 'px;height:' + H + 'px">click me</div>';
+    }
+    return '';                                                       // nowhere clear: no hint
+  }
+  $('#lifer-scatter').addEventListener('click', e => {
+    if (!e.target.closest('.scatter-sticker')) return;
+    try { localStorage.setItem(HINT_KEY, '1'); } catch (err) { /* storage blocked: it just shows again next time */ }
+    document.querySelectorAll('#lifer-scatter .sticker-hint, #lifer-scatter .sticker-hint-arrow').forEach(h => h.remove());
+  });
   addEventListener('resize', redrawTrail);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(redrawTrail);
   // …and whenever the page's height changes for any other reason (text appearing or
