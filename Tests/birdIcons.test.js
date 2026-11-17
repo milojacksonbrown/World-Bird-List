@@ -58,3 +58,18 @@ test('each shape draws a small decorative SVG with a label', () => {
   });
   assert.equal(run('birdIconSvg_("nonsense")'), run('birdIconSvg_("songbird")'));
 });
+
+// ---------- habitat drawings (docs/js/habitat-icons.js) ----------
+
+test('every habitat in the trait data has a drawing, and drawings are well formed', () => {
+  const hctx = vm.createContext({});
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'docs', 'js', 'habitat-icons.js'), 'utf8'), hctx, { filename: 'habitat-icons.js' });
+  const ICONS = vm.runInContext('HABITAT_ICONS_', hctx);
+  const traits = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'data', 'traits.json'), 'utf8'));
+  const missing = traits.values.habitat.filter(h => !ICONS[h]);
+  assert.deepEqual(missing, [], 'habitats with no drawing: ' + missing.join(', '));
+  hctx.H = 'Forest';
+  const svg = vm.runInContext('habitatIconSvg_(H, 20)', hctx);
+  assert.match(svg, /^<svg class="habitat-icon"[^>]*width="20"[^>]*>.*<\/svg>$/);
+  assert.equal(vm.runInContext('habitatIconSvg_("Moon", 20)', hctx), '');
+});

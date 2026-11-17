@@ -441,7 +441,8 @@ function isoDay_(d) {
  * @param {Object} [totals]  docs/data/region-totals.json: state names and eBird's species totals;
  *   without it, states show as codes (AU-VIC) and "% seen" is empty
  */
-function askData_(d, checklist, countries, totals) {
+function askData_(d, checklist, countries, totals, traits) {
+  const TR = traits || new Map();
   const C = countries || { byCode: {}, names: {} };
   const countryName = code => (C.byCode[code] && C.byCode[code].name) || code;
   const T = totals || {};
@@ -467,6 +468,7 @@ function askData_(d, checklist, countries, totals) {
       places: st[s.i] ? [...new Set((st[s.i].states || []).concat(st[s.i].counties || []).map(placeName))] : [],
       // "Worldwide" species count towards every land region, as on the region bars
       regions: checklist.regions.filter(r => r !== 'Worldwide' && inRegion_(s, r)),
+      ...traitFields_(TR.get(s.sci)),
     };
   });
   const years = [...new Set(Object.keys(d.perYear).concat(Object.keys(d.speciesPerYear), Object.keys(d.checklistsPerYear)))]
@@ -520,4 +522,39 @@ function queryFromLyrebird_(reply) {
   const checked = checkQuery_(reply.query);
   if (checked.problem) return { status: 'invalid', reason: checked.problem };
   return { status: 'query', query: checked.query, reason };
+}
+
+// ---------- Traits: size, range, habitat, diet… (docs/data/traits.json, from tools/build-traits.js) ----------
+const TRAIT_FIELDS_ = ['mass', 'massSource', 'wing', 'tail', 'beak', 'rangeSize', 'lifestyle', 'migration',
+  'habitat', 'diet', 'elevationMin', 'elevationMax', 'islandOnly', 'restrictedRange', 'flightless', 'clutchMax', 'nest'];
+const TRAIT_YESNO_ = ['islandOnly', 'restrictedRange', 'flightless'];
+
+/**
+ * Unpacks traits.json: words were stored as numbers (positions in "values"),
+ * yes/no as 1/0, and empty fields at the end trimmed off.
+ * @return {Map<string, Object>}  AviList scientific name -> { mass, habitat, … }
+ */
+function unpackTraits_(data) {
+  const out = new Map();
+  if (!data || !data.species || !Array.isArray(data.fields)) return out;
+  const values = data.values || {};
+  Object.keys(data.species).forEach(sci => {
+    const row = data.species[sci], t = {};
+    data.fields.forEach((f, i) => {
+      const v = row[i];
+      if (v === null || v === undefined) return;
+      if (TRAIT_YESNO_.includes(f)) t[f] = v === 1;
+      else if (values[f]) t[f] = Array.isArray(v) ? v.map(x => values[f][x]) : values[f][v];
+      else t[f] = v;
+    });
+    out.set(sci, t);
+  });
+  return out;
+}
+
+/** One species' trait fields for "Ask your list", with null (unknown) where there's no value. */
+function traitFields_(t) {
+  const o = {};
+  TRAIT_FIELDS_.forEach(f => { o[f] = t && t[f] !== undefined ? t[f] : (f === 'nest' ? [] : null); });
+  return o;
 }

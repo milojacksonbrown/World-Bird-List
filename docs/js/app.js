@@ -278,10 +278,19 @@
   let lastAsk = null;                  // { query, reason, backup } of the last answered question
   let askCache = null;                 // { d, data }: the tables for the file shown
 
+  // Size, range, habitat, diet… for every species (AVONET and BIRDBASE): fetched once, when first asked
+  let traitsLoading = null, traits = null;
+  function loadTraits() {
+    traitsLoading = traitsLoading || fetch('data/traits.json')
+      .then(res => res.ok ? res.json() : null).catch(() => null)
+      .then(t => { traits = t ? unpackTraits_(t) : null; $('#traits-credit').hidden = !t; });
+    return traitsLoading;
+  }
+
   async function askTables() {
-    await loadTotals();                  // state names and eBird totals, for the places table
-    if (!askCache || askCache.d !== current.d || askCache.countries !== countries || askCache.totals !== regionTotals) {
-      askCache = { d: current.d, countries, totals: regionTotals, data: askData_(current.d, checklist, countries, regionTotals) };
+    await Promise.all([loadTotals(), loadTraits()]);   // eBird totals for places; traits for species
+    if (!askCache || askCache.d !== current.d || askCache.countries !== countries || askCache.totals !== regionTotals || askCache.traits !== traits) {
+      askCache = { d: current.d, countries, totals: regionTotals, traits, data: askData_(current.d, checklist, countries, regionTotals, traits) };
     }
     return askCache.data;
   }
@@ -302,6 +311,11 @@
     else text = v;
     const latin = ['scientific', 'familyLatin', 'order'].includes(col.field);
     const words = latin ? '<span class="sci">' + esc(text) + '</span>' : esc(text);
+    // Habitats get a small drawing (habitat-icons.js)
+    if (col.field === 'habitat' && HABITAT_ICONS_[v]) {
+      return '<td><span class="with-icon"><span class="icon habitat" title="' + esc(HABITAT_ICONS_[v].label) + '">' +
+        habitatIconSvg_(v, 20) + '</span>' + words + '</span></td>';
+    }
     if (!kind) return '<td' + cls + '>' + words + '</td>';
     const shape = birdShape_(kind.familyLatin, kind.order);
     return '<td' + cls + '><span class="with-icon"><span class="icon" title="' + esc(SHAPES[shape].label) + '">' +

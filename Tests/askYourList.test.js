@@ -324,3 +324,59 @@ test('each result row carries its family and order, for the bird silhouettes', (
   const years = ask({ table: 'years' });
   assert.ok(years.kinds.every(k => k.familyLatin === '' && k.order === ''));   // not birds: no silhouette
 });
+
+// ---------- traits: size, range, habitat… (AVONET and BIRDBASE, docs/data/traits.json) ----------
+
+// The same compact shape tools/build-traits.js writes
+const TRAITS = {
+  fields: ['mass', 'massSource', 'wing', 'tail', 'beak', 'rangeSize', 'lifestyle', 'migration',
+    'habitat', 'diet', 'elevationMin', 'elevationMax', 'islandOnly', 'restrictedRange', 'flightless', 'clutchMax', 'nest'],
+  values: { massSource: ['AVONET', 'BIRDBASE'], habitat: ['Wetland', 'Woodland'], diet: ['Fish', 'Seed'], nest: ['Platform', 'Cup'], migration: ['Migratory'] },
+  species: {
+    'Ardea cinerea': [1500, 0, 450, 170, 120, 40000000, null, null, 0, 0, 0, 1500, 0, 0, 0, 5, [0]],
+    'Pandion haliaetus': [1500.5, 1, 470, null, null, null, null, 0, 0, 0, null, null, 0, 0, 0, 4, [0]],
+    'Streptopelia turtur': [140, 0, 175, null, null, 25000, null, 0, 1, 1, null, null, 0, 1, 0, 2, [0, 1]],   // a made-up range, to test "restricted"
+  },
+};
+
+test('unpackTraits_: words, yes/no and lists come back from the compact file', () => {
+  ctx.TRAITS = TRAITS;
+  const t = plain(Object.fromEntries(run('unpackTraits_(TRAITS)')));
+  assert.deepEqual(t['Streptopelia turtur'], { mass: 140, massSource: 'AVONET', wing: 175, rangeSize: 25000, migration: 'Migratory',
+    habitat: 'Woodland', diet: 'Seed', islandOnly: false, restrictedRange: true, flightless: false, clutchMax: 2, nest: ['Platform', 'Cup'] });
+  assert.equal(t['Pandion haliaetus'].massSource, 'BIRDBASE');
+  assert.equal(plain(run('unpackTraits_(null).size')), 0);
+});
+
+test('the site\'s trait fields match the data file and the Ask your list table', () => {
+  const file = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'data', 'traits.json'), 'utf8'));
+  assert.deepEqual(file.fields, plain(run('TRAIT_FIELDS_')));
+  const askFields = Object.keys(plain(run('ASK_TABLES_')).species.fields);
+  file.fields.forEach(f => assert.ok(askFields.includes(f), f + ' is missing from the species table'));
+  assert.ok(Object.keys(file.species).length > 10000);
+});
+
+ctx.TRAITS = TRAITS;
+run('var ASKTRAITS = askData_(buildDashboard_(ROWS, CL), CL, loadCountries_(COUNTRIES), null, unpackTraits_(TRAITS));');
+const askT = raw => { const c = check(raw); assert.equal(c.problem, ''); ctx.Q = c.query; return plain(run('runQuery_(Q, ASKTRAITS)')); };
+
+test('"the heaviest bird I\'ve seen": sort by weight; species with no weight go last', () => {
+  const r = askT({ table: 'species', filters: [{ field: 'seen', op: 'eq', value: 'true' }], sortField: 'mass', sortDir: 'desc' });
+  assert.deepEqual(col(r, 'common'), ['Osprey', 'Grey Heron', 'European Turtle Dove']);
+  assert.deepEqual(col(r, 'mass'), [1500.5, 1500, 140]);
+  const all = askT({ table: 'species', sortField: 'mass', sortDir: 'desc' });
+  assert.deepEqual(col(all, 'mass').slice(-1), [null]);               // Carrion Crow etc.: no value, last
+});
+
+test('habitat, diet, nests and yes/no traits as filters; unknown values never match', () => {
+  assert.deepEqual(col(askT({ table: 'species', filters: [{ field: 'diet', op: 'eq', value: 'fish' }], sortField: 'common' }), 'common'), ['Grey Heron', 'Osprey']);
+  assert.deepEqual(col(askT({ table: 'species', filters: [{ field: 'nest', op: 'has', value: 'Cup' }] }), 'common'), ['European Turtle Dove']);
+  assert.deepEqual(col(askT({ table: 'species', filters: [{ field: 'restrictedRange', op: 'eq', value: 'true' }] }), 'common'), ['European Turtle Dove']);
+  // Carrion Crow has no traits: it isn't counted as "under 1000 g"
+  assert.deepEqual(col(askT({ table: 'species', filters: [{ field: 'mass', op: 'lt', value: '1000' }] }), 'common'), ['European Turtle Dove']);
+});
+
+test('trait questions are described in plain English', () => {
+  ctx.Q = check({ table: 'species', filters: [{ field: 'seen', op: 'eq', value: 'true' }, { field: 'habitat', op: 'eq', value: 'Forest' }], sortField: 'rangeSize', sortDir: 'asc' }).query;
+  assert.match(run('describeQuery_(Q)'), /main habitat is “Forest”/i);
+});

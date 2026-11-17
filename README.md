@@ -30,7 +30,7 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
 - **Latest lifers:** the first time each species was seen, with a search box and a field-guide silhouette of each bird's body shape (heron, wader, owl, finch…). All 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
 - **Names to check:** every eBird name that doesn't match AviList, with an AI-assisted suggestion you can accept, change or ignore.
-- **Ask your list:** questions in plain English, answered from your own data, with the same silhouettes beside species, families and orders. It goes down to states, provinces and counties too: *Which county have I seen the most species in? What have I seen in Suffolk? My first lifer in each Australian state?*
+- **Ask your list:** questions in plain English, answered from your own data, with the same silhouettes beside species, families and orders. It goes down to states, provinces and counties too: *Which county have I seen the most species in? What have I seen in Suffolk? My first lifer in each Australian state?* And it knows each bird's size, range, habitat, diet, altitude, eggs and nest, from two scientific datasets: *What's the heaviest bird I've seen? Which of my birds have the smallest ranges? What nectar feeders have I seen?* Each habitat in an answer gets a small line drawing (forest, wetland, coast, desert…).
 
 ![The map zoomed into the United Kingdom: counties shaded by species seen, beside bars such as London 76 of 382 species (19.9%) and North Yorkshire 54 of 408 (13.2%)](docs/screenshot-uk-counties.png)
 
@@ -83,14 +83,29 @@ A public website can't contain an API key, because anyone could copy it. So the 
 
 If both models are unavailable or the cap is reached, **the rest of the site keeps working**: string matching still suggests fixes, and only the AI parts pause.
 
+## Bird traits: two scientific datasets, combined carefully
+
+"Ask your list" can answer questions about size, range, habitat and diet because every species is joined to two published, peer-reviewed datasets (both CC BY 4.0):
+
+- **[AVONET](https://doi.org/10.1111/ele.13898)** (Tobias et al. 2022): measurements of 90,000 museum specimens (weight, wing, tail and beak length), lifestyle, migration, and range size from BirdLife's range maps.
+- **[BIRDBASE](https://doi.org/10.1038/s41597-025-05615-3)** (Şekercioğlu et al. 2025): 78 traits from the literature, including main habitat and diet, altitude, island breeding, flightlessness, clutch size and nest type.
+
+A small tool (`tools/build-traits.js`) joins them to AviList and writes one compact file for the site (860 KB, about 290 KB compressed). Decisions worth explaining:
+
+- **One source per field, except where the two measure the same thing.** Weight comes from AVONET, and from BIRDBASE only where AVONET has none: both are average body mass in grams, and each answer can show which dataset it came from. Habitat and diet come from BIRDBASE only, because the two datasets define them differently, and mixing them would quietly make "insect-eaters" mean different things for different birds.
+- **Matching names across taxonomies.** AVONET uses 2021 names; AviList is 2026. BIRDBASE lists each species' BirdLife, eBird and AviList names side by side, so it doubles as a translation table: 9,840 species matched AVONET directly, 873 more through BIRDBASE or AVONET's eBird sheet. **97% of living species have AVONET data and 99% have BIRDBASE data.** The gaps are mostly species split since 2021. Full report: [`Tests/trait-coverage.md`](Tests/trait-coverage.md).
+- **Unknown stays unknown.** A species with no value is left blank and never counted as matching (it isn't "under 100 g" just because its weight is missing), and sorts last.
+- **What testing found.** On my own list, "smallest range" came back with Australasian Gannet first, at 10,000 km², for a bird seen across the Tasman Sea. AVONET's range is where a species *breeds or lives all year*, which for a seabird is mostly its colonies. The AI's description of the field now says so. Values are kept as published rather than corrected by hand.
+
 ## Testing
 
-- **107 automated tests** (`node --test`) cover:
+- **121 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers
   - Lyrebird's request checks, run against fake Google services, so no real key or internet is needed
   - the query checker, which has to reject unknown tables and fields, the wrong value types, and tampered replies
+  - the trait data: unpacking the compact file, filtering and sorting by weight, habitat, diet and nest, and unknown values never matching
   - a check that the website's copies of the shared code are up to date
   - a check that every AviList family has a silhouette, so a new AviList edition can't quietly leave a bird without one
 - **A coverage check for Name Fixes** (`tools/check-ebird-coverage.js`) runs every one of eBird's 11,201 species names, and 4,700 subspecies groups and forms, through the matching with no AI. **99.9% are settled without AI**: 11,168 match AviList directly, and 21 more through AviList's subspecies list (all 21 checked by hand). The 12 left over are all extinct birds that AviList's list leaves out, so every living bird eBird recognises is matched with no AI. Full report: [`Tests/ebird-coverage.md`](Tests/ebird-coverage.md).
@@ -152,6 +167,8 @@ Some things I learned along the way:
 | `NameFixesAssistant.gs` | Name matching, shortlist, confidence rules and the AI call to Groq or Google (shared by the sheet, Lyrebird and the website) |
 | `AskYourList.gs` | The question tool: allowed tables, prompt, query checker, runner and description (shared) |
 | `Lyrebird/Lyrebird.gs` | The AI middleman web app |
+| `tools/build-traits.js` | Joins AVONET and BIRDBASE to AviList (weight, range, habitat, diet, nests…) and writes the coverage report |
+| `docs/js/habitat-icons.js` | A line drawing for each of BIRDBASE's 14 main habitats, shown beside habitats in answers |
 | `docs/js/bird-icons.js` | The body-shape silhouettes: which shape each family gets, and the numbers each shape is drawn from |
 | `docs/` | The website, served by GitHub Pages. `docs/lib/` holds generated copies of the shared `.gs` files |
 | `tools/` | Scripts run on my computer: convert AviList, copy shared code to the site, build country names and state/province outlines, fetch regional species totals from eBird, run the accuracy and coverage checks |
@@ -178,4 +195,5 @@ Follow the instructions at the top of [`LifeList.gs`](LifeList.gs), or the [setu
 - **Checklist:** AviList Core Team. 2026. *AviList: The Global Avian Checklist, v2026.* https://doi.org/10.2173/avilist.v2026. Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), and converted to a smaller format for this site.
 - **Sightings and regional species totals:** [eBird](https://ebird.org) (Cornell Lab of Ornithology). This project isn't affiliated with eBird or AviList.
 - **Map:** country and state/province outlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain), drawn with [Leaflet](https://leafletjs.com/). **Charts:** [Chart.js](https://www.chartjs.org/).
+- **Bird traits:** AVONET (Tobias, J.A. et al. 2022, *Ecology Letters* 25: 581–597, https://doi.org/10.1111/ele.13898) and BIRDBASE v2025.1 (Şekercioğlu, Ç.H. et al. 2025, *Scientific Data*, https://doi.org/10.1038/s41597-025-05615-3), both CC BY 4.0, joined to AviList and converted to a smaller format.
 - **AI:** OpenAI's GPT-OSS 120B on Groq, with Google Gemini as the backup, through Lyrebird.
