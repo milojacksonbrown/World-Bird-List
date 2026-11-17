@@ -87,7 +87,7 @@
 
     <section class="plate" aria-labelledby="lifers-title">
       <h2 id="lifers-title">Latest lifers</h2>
-      <p class="caption">The first time each species was recorded, newest first. Search to find any of them.</p>
+      <p class="caption">The first time each species was recorded, newest first. Search to find any of them, and click a bird for its fact file.</p>
       <div class="lifer-tools">
         <label class="lifer-search">Search your lifers
           <input id="lifer-search" type="search" autocomplete="off" placeholder="e.g. plover, Corvus or herons">
@@ -137,8 +137,16 @@
     </section>
   </main>
 
+  <!-- A bird's fact file: opened by clicking its name in Latest lifers or an Ask your list answer -->
+  <dialog id="factfile" class="factfile" aria-labelledby="factfile-title">
+    <button id="factfile-close" class="ff-close" type="button" aria-label="Close the fact file">×</button>
+    <div id="factfile-body"></div>
+  </dialog>
+
   <footer class="colophon">
     <p id="citation"></p>
+    <p>Range maps: records from <a href="https://www.gbif.org">GBIF.org</a>, including eBird, shown by season.</p>
+    <p id="stickers-credit">Bird illustrations: <a href="https://github.com/alchaincyf/huashu-bird-sticker">huashu-bird-sticker</a> by Huashu (<a href="https://birdalbum.com">Bird Album</a>), CC BY 4.0. They are AI-generated and may contain errors.</p>
     <p id="traits-credit" hidden>Size, range, habitat, diet and nest data: AVONET (<a href="https://doi.org/10.1111/ele.13898">Tobias et al. 2022</a>) and BIRDBASE (<a href="https://doi.org/10.1038/s41597-025-05615-3">Şekercioğlu et al. 2025</a>), both CC BY 4.0.</p>
     <p id="totals-credit" hidden>Species totals for states, provinces and counties: <a href="https://ebird.org">eBird</a> (Cornell Lab of Ornithology).</p>
     <p>Your eBird file is read in your browser and is never uploaded. Not affiliated with eBird or AviList.</p>

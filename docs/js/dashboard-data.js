@@ -134,6 +134,7 @@ function speciesStats_(rows, index) {
   const col = {
     sci: H.indexOf('scientific name'), common: H.indexOf('common name'), date: H.indexOf('date'),
     time: H.indexOf('time'), state: H.indexOf('state/province'), sub: H.indexOf('submission id'), county: H.indexOf('county'),
+    lat: H.indexOf('latitude'), lng: H.indexOf('longitude'),
   };
   if (col.sci < 0) return out;
   const subs = {}, firstOf = {};       // species -> Set of checklists; species -> earliest {key, date, cc, state}
@@ -148,7 +149,13 @@ function speciesStats_(rows, index) {
     const res = resolveEbirdName_(sci, col.common >= 0 ? String(r[col.common] || '').trim() : '', index);
     if (res.skip || res.target === undefined || res.target === null) continue;
     const t = res.target;
-    const st = out.species[t] || (out.species[t] = { checklists: 0, firstCountry: '', states: new Set(), counties: new Set() });
+    const st = out.species[t] || (out.species[t] = { checklists: 0, firstCountry: '', states: new Set(), counties: new Set(), points: new Map() });
+    // Where it was seen, rounded to 0.1° (about 10 km), for the fact file's map
+    const lat = col.lat >= 0 ? parseFloat(r[col.lat]) : NaN, lng = col.lng >= 0 ? parseFloat(r[col.lng]) : NaN;
+    if (isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      const p = [Math.round(lat * 10) / 10, Math.round(lng * 10) / 10];
+      st.points.set(p.join(','), p);
+    }
     const sub = col.sub >= 0 ? String(r[col.sub] || '').trim() : '';
     (subs[t] = subs[t] || new Set()).add(sub || 'row' + i);
     const state = String(col.state >= 0 ? r[col.state] : '').trim().toUpperCase();
@@ -557,4 +564,320 @@ function traitFields_(t) {
   const o = {};
   TRAIT_FIELDS_.forEach(f => { o[f] = t && t[f] !== undefined ? t[f] : (f === 'nest' ? [] : null); });
   return o;
+}
+
+// ---------- Fact files: everything known about one species, from every source ----------
+
+const IUCN_NAMES_ = { LC: 'Least Concern', NT: 'Near Threatened', VU: 'Vulnerable', EN: 'Endangered', CR: 'Critically Endangered',
+  EW: 'Extinct in the Wild', EX: 'Extinct', DD: 'Data Deficient', NE: 'Not Evaluated' };
+
+/** "Alcedo atthis" -> "Alcedo_atthis": the stickers' file name. */
+function stickerName_(sci) { return String(sci).replace(/ /g, '_'); }
+
+/**
+ * Where a species' sticker is: a small thumbnail kept with the site, and the
+ * full-size one on the pinned CDN. null if the species has no sticker.
+ * @param {Object} sp  a checklist species ({sci, family, order})
+ * @param {Object} stickers  docs/data/stickers.json
+ */
+function stickerFor_(sp, stickers) {
+  if (!stickers || !sp || (stickers.none || []).includes(sp.sci)) return null;
+  const name = stickerName_(sp.sci);
+  return { thumb: 'stickers/' + name + '.webp', full: stickers.cdn + 'stickers/' + sp.order + '/' + sp.family + '/' + name + '.webp' };
+}
+
+/** The species' page on Bird Album (the stickers' own guide), or '' if it has none. */
+function birdAlbumUrl_(sp, stickers) {
+  const pages = (stickers && stickers.pages) || {};
+  const slug = sp.sci in pages ? pages[sp.sci]
+    : String(sp.common).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+      .replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return slug ? 'https://birdalbum.com/birds/' + slug + '/' : '';
+}
+
+/**
+ * The fact file for one species, as plain values for the page to lay out.
+ * Each fact says which dataset it came from, so the reader can judge it.
+ * @param {Object} sp  the checklist species
+ * @param {Object} row  its row in askData_'s species table (records and traits)
+ * @param {Object} extra  { lifer, range, stickers }: its lifer record (if seen), AviList range text, stickers.json
+ */
+function factFile_(sp, row, extra) {
+  const e = extra || {}, r = row || {};
+  const n = (v, dp) => Number(v).toLocaleString('en-GB', { maximumFractionDigits: dp === undefined ? 1 : dp });
+  const has = v => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length);
+  const fact = (label, value, source) => (has(value) ? { label, value: String(value), source } : null);
+  const weight = has(r.mass) ? (r.mass >= 1000 ? n(r.mass / 1000, 1) + ' kg' : n(r.mass) + ' g') : null;
+  const elevation = has(r.elevationMin) && has(r.elevationMax)
+    ? (r.elevationMin === r.elevationMax ? n(r.elevationMax, 0) + ' m' : n(r.elevationMin, 0) + '–' + n(r.elevationMax, 0) + ' m')
+    : has(r.elevationMax) ? 'up to ' + n(r.elevationMax, 0) + ' m' : null;
+  const range = has(r.rangeSize) ? (r.rangeSize >= 1e6 ? n(r.rangeSize / 1e6, 1) + ' million km²' : n(r.rangeSize, 0) + ' km²') : null;
+  const iucn = String(sp.iucn || '').split(' ')[0];
+  const tags = [
+    r.islandOnly && 'Breeds only on islands',
+    r.restrictedRange && 'Restricted range (under 50,000 km²)',
+    r.flightless && 'Flightless',
+    sp.extinct && 'Extinct',
+  ].filter(Boolean);
+  const lifer = e.lifer || null;
+  const clean = list => list.filter(Boolean);
+  return {
+    common: sp.common, sci: sp.sci,
+    family: sp.familyEn || sp.family, familyLatin: sp.family, order: sp.order,
+    iucn, iucnName: IUCN_NAMES_[iucn] || '', threatened: THREATENED_.test(sp.iucn || ''),
+    sticker: stickerFor_(sp, e.stickers),
+    tags,
+    habitat: r.habitat || null,
+    range: e.range ? e.range.charAt(0).toUpperCase() + e.range.slice(1) : '',   // AviList's text starts in lower case
+    regions: (sp.regions || []).filter(x => x !== 'Worldwide'),
+    worldwide: (sp.regions || []).includes('Worldwide'),
+    size: clean([
+      fact('Weight', weight, r.massSource || ''),
+      fact('Wing length', has(r.wing) ? n(r.wing) + ' mm' : null, 'AVONET'),
+      fact('Tail', has(r.tail) ? n(r.tail) + ' mm' : null, 'AVONET'),
+      fact('Beak', has(r.beak) ? n(r.beak) + ' mm' : null, 'AVONET'),
+    ]),
+    life: clean([
+      fact('Main habitat', r.habitat, 'BIRDBASE'),
+      fact('Main diet', r.diet, 'BIRDBASE'),
+      fact('Lifestyle', r.lifestyle, 'AVONET'),
+      fact('Migration', r.migration, 'AVONET'),
+      fact('Usual altitude', elevation, 'BIRDBASE'),
+      fact('Range size', range, 'AVONET'),
+      fact('Clutch', has(r.clutchMax) ? 'up to ' + n(r.clutchMax) + ' egg' + (r.clutchMax === 1 ? '' : 's') : null, 'BIRDBASE'),
+      fact('Nest', has(r.nest) ? r.nest.join(' or ') : null, 'BIRDBASE'),
+    ]),
+    seen: !!r.seen,
+    records: r.seen ? {
+      firstSeen: r.firstSeen, firstPlace: r.firstPlace || '',
+      checklist: lifer && /^S\d+$/.test(lifer.checklist) ? lifer.checklist : '',
+      checklists: r.checklists || 0,
+      countries: r.countries || [], places: r.places || [],
+    } : null,
+    links: clean([
+      sp.code && { label: 'eBird', url: 'https://ebird.org/species/' + encodeURIComponent(sp.code) },
+      e.stickers && birdAlbumUrl_(sp, e.stickers) && { label: 'Bird Album', url: birdAlbumUrl_(sp, e.stickers) },
+    ]),
+  };
+}
+
+// ---------- Range maps: where a species has been recorded, by season (GBIF) ----------
+
+/**
+ * Reads the points from one Mapbox Vector Tile (the format GBIF's map service sends):
+ * a small protocol-buffer decoder, enough for point layers. Pure: bytes in, points out.
+ * @param {Uint8Array} buf
+ * @return {{extent:number, points: Array<{x:number, y:number, total:number}>}}  x, y from 0 to extent
+ */
+function readMvtPoints_(buf) {
+  let pos = 0;
+  const varint = end => {
+    let v = 0, shift = 0, b;
+    do { if (pos >= end) throw new Error('truncated tile'); b = buf[pos++]; v += (b & 0x7f) * 2 ** shift; shift += 7; } while (b & 0x80);
+    return v;
+  };
+  const skip = (type, end) => {
+    if (type === 0) varint(end);
+    else if (type === 1) pos += 8;
+    else if (type === 2) { const len = varint(end); pos += len; }   // not pos += varint(): that adds to the old pos
+    else if (type === 5) pos += 4;
+    else throw new Error('unknown field type ' + type);
+  };
+  const packed = end => { const len = varint(end), stop = pos + len, out = []; while (pos < stop) out.push(varint(stop)); return out; };
+  const zigzag = n => (n % 2 ? -(n + 1) / 2 : n / 2);
+  const points = [];
+  let extent = 4096;
+  while (pos < buf.length) {
+    const key = varint(buf.length);
+    if (key >> 3 !== 3 || (key & 7) !== 2) { skip(key & 7, buf.length); continue; }   // only layers matter
+    const layerLen = varint(buf.length), layerEnd = pos + layerLen;   // read the length first: it moves pos
+    const keys = [], values = [], feats = [];
+    while (pos < layerEnd) {
+      const k = varint(layerEnd), field = k >> 3, type = k & 7;
+      if (field === 2 && type === 2) {                      // a feature
+        const fLen = varint(layerEnd), fEnd = pos + fLen;
+        const f = { tags: [], geom: [] };
+        while (pos < fEnd) {
+          const fk = varint(fEnd);
+          if (fk >> 3 === 2 && (fk & 7) === 2) f.tags = packed(fEnd);
+          else if (fk >> 3 === 4 && (fk & 7) === 2) f.geom = packed(fEnd);
+          else skip(fk & 7, fEnd);
+        }
+        feats.push(f);
+      } else if (field === 3 && type === 2) {               // a key
+        const len = varint(layerEnd);
+        keys.push(new TextDecoder().decode(buf.subarray(pos, pos + len))); pos += len;
+      } else if (field === 4 && type === 2) {               // a value: numbers only matter here
+        const vLen = varint(layerEnd), vEnd = pos + vLen;
+        let v = null, lastString = null;
+        while (pos < vEnd) {
+          const vk = varint(vEnd), vf = vk >> 3, vt = vk & 7;
+          if (vt === 0 && (vf === 4 || vf === 5)) v = varint(vEnd);
+          else if (vt === 0 && vf === 6) v = zigzag(varint(vEnd));
+          else if (vt === 1 && vf === 3) { v = new DataView(buf.buffer, buf.byteOffset + pos, 8).getFloat64(0, true); pos += 8; }
+          else if (vt === 5 && vf === 2) { v = new DataView(buf.buffer, buf.byteOffset + pos, 4).getFloat32(0, true); pos += 4; }
+          else if (vt === 2 && vf === 1) { const len = varint(vEnd); lastString = new TextDecoder().decode(buf.subarray(pos, pos + len)); pos += len; }
+          else skip(vt, vEnd);
+        }
+        values.push(v === null ? lastString : v);
+      } else if (field === 5 && type === 0) extent = varint(layerEnd);
+      else skip(type, layerEnd);
+    }
+    feats.forEach(f => {
+      const props = {};
+      for (let i = 0; i < f.tags.length; i += 2) props[keys[f.tags[i]]] = values[f.tags[i + 1]];
+      const total = Number(props.total) || 1;
+      // Points: MoveTo (command 1) with a count, then x, y pairs relative to the cursor
+      let x = 0, y = 0, i = 0;
+      while (i < f.geom.length) {
+        const cmd = f.geom[i] & 7, count = f.geom[i] >> 3; i++;
+        for (let c = 0; c < count; c++) {
+          if (cmd === 7) continue;                          // ClosePath has no coordinates
+          x += zigzag(f.geom[i++]); y += zigzag(f.geom[i++]);
+          if (cmd === 1) points.push({ x, y, total, props });
+        }
+      }
+    });
+    pos = layerEnd;
+  }
+  return { extent, points };
+}
+
+/** A geohash (e.g. "f7x") as the box of latitude and longitude it covers. */
+function geohashBox_(hash) {
+  const B32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+  const lat = [-90, 90], lon = [-180, 180];
+  let even = true;
+  for (const ch of String(hash).toLowerCase()) {
+    const n = B32.indexOf(ch);
+    if (n < 0) return null;
+    for (let bit = 4; bit >= 0; bit--) {
+      const r = even ? lon : lat, mid = (r[0] + r[1]) / 2;
+      if ((n >> bit) & 1) r[0] = mid; else r[1] = mid;
+      even = !even;
+    }
+  }
+  return { lat, lon };
+}
+
+/**
+ * Sorts GBIF's grid cells by season, like a field guide's range map: recorded in
+ * June–July only, December–January only, or both. (Not "breeding" and "winter":
+ * June is summer in the north and winter in the south.) For birds with many
+ * records, cells with only one or two are left out, so a few vagrants don't
+ * look like part of the range.
+ * @param {Array} june  features from readMvtPoints_ for June–July (props.geohash, total)
+ * @param {Array} december  the same for December–January
+ * @return {Array<{hash, box, season: 'june'|'december'|'both', total}>}
+ */
+function seasonCells_(june, december) {
+  const add = (map, list, season) => (list || []).forEach(p => {
+    const h = p.props && p.props.geohash;
+    if (!h) return;
+    const c = map.get(h) || { hash: h, june: 0, december: 0 };
+    c[season] += p.total || 1;
+    map.set(h, c);
+  });
+  const cells = new Map();
+  add(cells, june, 'june');
+  add(cells, december, 'december');
+  const all = [...cells.values()];
+  const records = all.reduce((n, c) => n + c.june + c.december, 0);
+  const min = records > 5000 ? Math.max(3, Math.round(records * 1e-5)) : 1;   // one record in 100,000, for common birds
+  return all.map(c => {
+    const j = c.june >= min, d = c.december >= min;
+    if (!j && !d) return null;
+    const box = geohashBox_(c.hash);
+    return box && { hash: c.hash, box, season: j && d ? 'both' : j ? 'june' : 'december', total: c.june + c.december };
+  }).filter(Boolean);
+}
+
+/** Latitude and longitude to Web Mercator, as a fraction of the world's width (0 to 1, north at 0). */
+function mercator_(lat, lon) {
+  const clamped = Math.max(-85, Math.min(85, lat)) * Math.PI / 180;
+  return [(lon + 180) / 360, (1 - Math.log(Math.tan(clamped) + 1 / Math.cos(clamped)) / Math.PI) / 2];
+}
+
+/**
+ * The range map as an SVG string: the land, the season cells and your own sightings,
+ * framed around where the bird has been recorded.
+ * @param {Array} cells  from seasonCells_
+ * @param {Object} countries  Natural Earth GeoJSON (the main map's outlines)
+ * @param {Array<[number, number]>} sightings  [lat, lng] where you recorded it
+ */
+function rangeMapSvg_(cells, countries, sightings) {
+  const W = 1000;                                       // the world is 1000 units wide
+  const P = (lat, lon) => mercator_(lat, lon).map(v => v * W);
+  // Frame the map on the middle 95% of the grid cells, east to west and north to south, so a few
+  // far-flung strays don't shrink the range to a dot; and on all your own sightings. (Cells, not
+  // records: counting records would centre the map on wherever most birdwatchers live.)
+  const pts = [];
+  const centres = cells.map(c => ({ p: P((c.box.lat[0] + c.box.lat[1]) / 2, (c.box.lon[0] + c.box.lon[1]) / 2), w: 1, c }));
+  const records = centres.reduce((n, x) => n + x.w, 0);
+  const middle = axis => {
+    const sorted = centres.slice().sort((a, b) => a.p[axis] - b.p[axis]);
+    let run = 0;
+    const lo = sorted.find(x => (run += x.w) >= records * 0.025);
+    run = 0;
+    const hi = sorted.slice().reverse().find(x => (run += x.w) >= records * 0.025);
+    return lo && hi ? [lo.p[axis], hi.p[axis]] : null;
+  };
+  const mx = middle(0), my = middle(1);
+  if (mx && my) {
+    centres.filter(x => x.p[0] >= mx[0] && x.p[0] <= mx[1] && x.p[1] >= my[0] && x.p[1] <= my[1])
+      .forEach(x => pts.push(P(x.c.box.lat[0], x.c.box.lon[0]), P(x.c.box.lat[1], x.c.box.lon[1])));
+  }
+  (sightings || []).forEach(([la, lo]) => pts.push(P(la, lo)));
+  if (!pts.length) return '';
+  let x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
+  let y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+  // Pad the frame, keep it at least a continent wide, and make it 3:2
+  const pad = Math.max(x1 - x0, y1 - y0) * 0.12 + 8;
+  x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+  const minW = 120;
+  if (x1 - x0 < minW) { const m = (x0 + x1) / 2; x0 = m - minW / 2; x1 = m + minW / 2; }
+  const ratio = 1.5;
+  if ((x1 - x0) / (y1 - y0) < ratio) { const m = (x0 + x1) / 2, w = (y1 - y0) * ratio; x0 = m - w / 2; x1 = m + w / 2; }
+  else { const m = (y0 + y1) / 2, h = (x1 - x0) / ratio; y0 = m - h / 2; y1 = m + h / 2; }
+  if (x1 - x0 > W) { x0 = 0; x1 = W; }
+  const r1 = n => Math.round(n * 10) / 10;
+  // Land: only the countries that reach into the frame
+  const ring = r => {
+    const xy = r.map(([lo, la]) => P(la, lo));
+    if (xy.every(p => p[0] < x0) || xy.every(p => p[0] > x1) || xy.every(p => p[1] < y0) || xy.every(p => p[1] > y1)) return '';
+    return 'M' + xy.map(p => r1(p[0]) + ' ' + r1(p[1])).join('L') + 'Z';
+  };
+  const land = ((countries && countries.features) || []).map(f => {
+    const g = f.geometry || {};
+    const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+    return polys.map(poly => poly.map(ring).join('')).join('');
+  }).filter(Boolean).join('');
+  // Each cell is drawn at least 1/90 of the map wide, so a widely scattered bird still shows on a world map
+  const minCell = (x1 - x0) / 90;
+  const sizes = [];
+  const cellRects = season => cells.filter(c => c.season === season).map(c => {
+    const [ax, ay] = P(c.box.lat[1], c.box.lon[0]), [bx, by] = P(c.box.lat[0], c.box.lon[1]);
+    const w = Math.max(bx - ax + 0.3, minCell), h = Math.max(by - ay + 0.3, minCell);
+    sizes.push(Math.min(w, h));
+    const cx = (ax + bx) / 2, cy = (ay + by) / 2;
+    return '<rect x="' + r1(cx - w / 2) + '" y="' + r1(cy - h / 2) + '" width="' + r1(w) + '" height="' + r1(h) + '"/>';
+  }).join('');
+  const dotR = r1((x1 - x0) / 140);
+  const groups = ['june', 'december', 'both'].map(season => '<g class="' + season + '" filter="url(#range-smooth)">' + cellRects(season) + '</g>').join('');
+  // Smoothing ("gooey" filter): blur the squares, then turn the blurred edge back into a sharp one.
+  // Neighbouring squares melt into one rounded shape, like a field guide's range map; lone squares
+  // become round dots. The blur is about half a typical square, so shapes keep their size.
+  sizes.sort((a, b) => a - b);
+  const cell = sizes.length ? sizes[Math.floor(sizes.length / 2)] : minCell;
+  const blur = r1(Math.max(0.3, cell * 0.45));
+  return '<svg class="range-map" viewBox="' + [x0, y0, x1 - x0, y1 - y0].map(r1).join(' ') + '" role="img" aria-label="Range map">' +
+    '<rect class="sea" x="' + r1(x0) + '" y="' + r1(y0) + '" width="' + r1(x1 - x0) + '" height="' + r1(y1 - y0) + '"/>' +
+    '<path class="land" d="' + land + '"/>' +
+    '<defs><filter id="range-smooth" filterUnits="userSpaceOnUse" x="' + r1(x0) + '" y="' + r1(y0) + '" width="' + r1(x1 - x0) + '" height="' + r1(y1 - y0) + '">' +
+      '<feGaussianBlur stdDeviation="' + blur + '"/>' +
+      '<feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 14 -6"/></filter></defs>' +
+    '<g class="cells">' + groups + '</g>' +
+    '<path class="borders" d="' + land + '"/>' +
+    '<g class="mine">' + (sightings || []).map(([la, lo]) => { const [x, y] = P(la, lo); return '<circle cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + dotR + '"/>'; }).join('') + '</g>' +
+    '</svg>';
 }

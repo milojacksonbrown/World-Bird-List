@@ -310,3 +310,94 @@ h1 {
 }
 .drop-overlay span { display: block; margin-top: 8px; font-family: var(--sans); font-size: 0.95rem; color: var(--ink-soft); }
 @media (hover: none) { .dropzone { display: none; } }   /* phones and tablets can't drag files in; the Upload button does the job */
+
+/* ---------- stickers and fact files ---------- */
+.icon.sticker { display: inline-flex; flex: none; }
+.icon.sticker img { display: block; object-fit: contain; }
+.lifers .icon.sticker img { width: 30px; height: 30px; }
+.bird-link {
+  padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px;
+}
+.bird-link:hover { color: var(--green-soft); text-decoration-color: currentColor; }
+.bird-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+
+.factfile {
+  width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 28px 28px 24px; overflow: auto;
+  background: var(--card); color: var(--ink); border: 1px solid var(--rule);
+  box-shadow: 0 0 0 4px var(--card), 0 0 0 5px var(--rule), 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+.factfile::backdrop { background: rgba(42, 39, 33, 0.45); }
+.ff-close {
+  position: sticky; top: 0; float: right; margin: -14px -14px 0 0; width: 36px; height: 36px; z-index: 1;
+  border: 1px solid var(--rule); border-radius: 50%; background: var(--card); color: var(--ink); font-size: 1.4rem; line-height: 1; cursor: pointer;
+}
+.ff-close:hover { border-color: var(--green-soft); color: var(--green); }
+.ff-top { display: grid; grid-template-columns: 260px 1fr; gap: 24px; align-items: start; }
+.ff-picture { margin: 0; }
+.ff-picture img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; background: radial-gradient(circle, var(--paper) 0%, var(--card) 70%); }
+.ff-picture figcaption { margin-top: 6px; font-size: 0.78rem; color: var(--ink-soft); }
+.ai-label { display: inline-block; padding: 0 6px; border: 1px solid var(--rule); border-radius: 8px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.ff-none { display: flex; flex-direction: column; align-items: center; padding: 30px 0; color: var(--green-soft); }
+.ff-head h2 { margin: 0; font-family: var(--serif); font-size: 1.9rem; color: var(--green); line-height: 1.1; }
+.ff-head > .sci { margin: 2px 0 10px; font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 1.1rem; }
+.ff-head p { margin: 6px 0; }
+.ff-family .sci { font-family: var(--serif); font-style: italic; }
+.ff-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ff-tags .tag { padding: 2px 9px; border-radius: 12px; background: var(--green); color: var(--paper); font-size: 0.85rem; }
+.src { font-size: 0.72rem; color: var(--ink-soft); border: 1px solid var(--rule); border-radius: 8px; padding: 0 5px; white-space: nowrap; }
+.ff-block { margin-top: 18px; }
+.ff-block h3 { margin: 0 0 6px; font-family: var(--serif); font-size: 1.15rem; color: var(--green); border-bottom: 1px solid var(--rule); padding-bottom: 3px; }
+.ff-block p { margin: 0; }
+.ff-block dl { margin: 0; }
+.ff-block dl > div { display: grid; grid-template-columns: 9.5em 1fr; gap: 10px; padding: 4px 0; border-bottom: 1px dotted var(--rule); }
+.ff-block dl > div:last-child { border-bottom: 0; }
+.ff-block dt { color: var(--ink-soft); }
+.ff-block dd { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ff-block .icon.habitat { display: inline-flex; color: var(--green-soft); }
+.ff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.ff-grid .ff-block dl > div { grid-template-columns: 7.2em 1fr; }
+.ff-block .src { font-size: 0.66rem; padding: 0 4px; }
+.ff-links { margin: 18px 0 0; font-size: 0.95rem; }
+@media (max-width: 640px) {
+  .factfile { padding: 20px 16px; }
+  .ff-top, .ff-grid { grid-template-columns: 1fr; }
+  .ff-picture { max-width: 240px; margin: 0 auto; }
+  .ff-block dl > div { grid-template-columns: 8em 1fr; }
+}
+
+/* Range map in the fact file: June–July warm, December–January cool, both purple (as field guides use) */
+:root { --season-june: #e0a37c; --season-december: #8fb6d4; --season-both: #a597c6; }
+.ff-map { border: 1px solid var(--rule); background: var(--sea); min-height: 120px; }
+.ff-map .working, .ff-map .ai-note { padding: 40px 12px; text-align: center; margin: 0; }
+.range-map { display: block; width: 100%; height: auto; }
+.range-map .sea { fill: var(--sea); }
+.range-map .land { fill: var(--paper); stroke: none; }
+.range-map .borders { fill: none; stroke: #8d8068; stroke-width: 0.7; stroke-opacity: 0.85; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.range-map .cells { opacity: 0.78; }   /* the land and borders show through */
+.range-map .june rect { fill: var(--season-june); }
+.range-map .december rect { fill: var(--season-december); }
+.range-map .both rect { fill: var(--season-both); }
+.range-map .mine circle { fill: var(--green); stroke: var(--card); stroke-width: 0.6; vector-effect: non-scaling-stroke; }
+.ff-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 0.88rem; }
+.ff-legend .sw { display: inline-block; width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; border-radius: 3px; }
+.ff-legend .sw.june { background: var(--season-june); }
+.ff-legend .sw.december { background: var(--season-december); }
+.ff-legend .sw.both { background: var(--season-both); }
+.ff-legend .sw.mine { background: var(--green); border-radius: 50%; border: 2px solid var(--card); box-shadow: 0 0 0 1px var(--green); width: 10px; height: 10px; }
+.ff-credit { margin: 4px 0 0 !important; font-size: 0.78rem; color: var(--ink-soft); }
+
+/* IUCN Red List categories, coloured as the Red List does: green (safe) through yellow and orange to red */
+.iucn {
+  display: inline-block; min-width: 2.3em; padding: 1px 6px; border-radius: 4px; text-align: center;
+  font: 600 0.82rem/1.5 var(--sans); letter-spacing: 0.03em; color: #fff;
+}
+.iucn-LC { background: #2d6a4f; }
+.iucn-NT { background: #6b8e23; }
+.iucn-VU { background: #e0b021; color: var(--ink); }
+.iucn-EN { background: #d9701e; }
+.iucn-CR { background: #b3261e; }
+.iucn-EW { background: #5c3a74; }
+.iucn-EX { background: #2a2721; }
+.iucn-DD { background: #8a8478; }
+.ff-iucn .iucn { font-size: 0.95rem; }

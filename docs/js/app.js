@@ -17,7 +17,7 @@
   // Colours come from styles.css, so the charts and map match the page
   const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-  let checklist = null, matching = null, countries = null;
+  let checklist = null, matching = null, countries = null, stickers = null;
   let charts = [], map = null, countryLayer = null, countryShapes = null;
   let stateLayer = null, zoomed = null;                 // zoomed: {cc, name} of the country whose regions are shown
   const regionFiles = new Map();                        // cc -> its docs/data/regions file (null if it didn't load)
@@ -43,6 +43,8 @@
       const res = await fetch('data/avilist.json');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       checklist = loadChecklist_(await res.json());
+      // Which species have a sticker (huashu-bird-sticker); without it, the silhouettes are used
+      fetch('data/stickers.json').then(r => r.ok ? r.json() : null).then(st => { stickers = st; if (current) { renderLifers(); renderAsk(); } }).catch(() => {});
       // Country names for "Ask your list"; if they don't load, countries show as codes
       fetch('data/countries.json').then(r => r.ok ? r.json() : null).then(c => { countries = c && loadCountries_(c); }).catch(() => {});
       $('#citation').innerHTML = 'Checklist: ' + esc(checklist.citation).replace(/(https:\/\/doi\.org\/\S+)/, '<a href="$1">$1</a>') +
@@ -98,12 +100,42 @@
   const LIFERS_SHOWN = 10;
   let lifersExpanded = false;
 
+  /**
+   * A bird's icon: its sticker (a small copy kept with the site), or, if it has none or the
+   * picture doesn't load, a silhouette of its family's body shape (bird-icons.js).
+   */
+  function birdIcon(sci, familyLatin, order, size) {
+    const shape = birdShape_(familyLatin, order);
+    const sp = sci && checklist.species[checklist.bySci.get(String(sci).toLowerCase())];
+    const st = sp && stickerFor_(sp, stickers);
+    if (st) {
+      return '<span class="icon sticker" data-shape="' + esc(shape) + '" data-size="' + size + '"><img src="' + esc(st.thumb) +
+        '" width="' + size + '" height="' + size + '" alt="" loading="lazy" decoding="async"></span>';
+    }
+    return '<span class="icon" title="' + esc(SHAPES[shape].label) + '">' + birdIconSvg_(shape, size) + '</span>';
+  }
+  // A sticker that fails to load is swapped for the silhouette (error events don't bubble, so this listens on the way down)
+  document.addEventListener('error', e => {
+    const box = e.target.closest && e.target.closest('.icon.sticker');
+    if (!box) return;
+    box.classList.remove('sticker');
+    box.innerHTML = birdIconSvg_(box.dataset.shape, Number(box.dataset.size) || 26);
+  }, true);
+
+  /** An IUCN Red List category as a coloured badge (green for Least Concern through to red for Critically Endangered). */
+  const IUCN_CODES = ['LC', 'NT', 'VU', 'EN', 'CR', 'EW', 'EX', 'DD'];
+  const iucnBadge = code => {
+    const c = String(code || '').split(' ')[0].toUpperCase();
+    return IUCN_CODES.includes(c) ? '<span class="iucn iucn-' + c + '" title="' + esc(IUCN_NAMES_[c]) + '">' + c + '</span>' : esc(code);
+  };
+
+  /** A bird's name as a button that opens its fact file. */
+  const birdButton = (sci, inner) => '<button type="button" class="bird-link" data-sci="' + esc(sci) + '">' + inner + '</button>';
+
   function liferItem(l) {
     return '<li><span class="date">' + esc(date(l.date)) + '</span>' +
-      // A silhouette of the bird's body shape (bird-icons.js), with its name as a tooltip
-      '<span class="who"><span class="icon" title="' + esc(SHAPES[birdShape_(l.familyLatin, l.order)].label) + '">' +
-        birdIconSvg_(birdShape_(l.familyLatin, l.order), 26) + '</span>' +
-        '<span><span class="name">' + esc(l.common) + '</span> <span class="sci">' + esc(l.sci) + '</span></span></span>' +
+      '<span class="who">' + birdIcon(l.sci, l.familyLatin, l.order, 30) +
+        '<span>' + birdButton(l.sci, '<span class="name">' + esc(l.common) + '</span>') + ' <span class="sci">' + esc(l.sci) + '</span></span></span>' +
       // Link only real eBird checklist IDs ("S123…"); the sample data's are made up
       '<span class="where">' + (/^S\d+$/.test(l.checklist)
         ? '<a href="https://ebird.org/checklist/' + encodeURIComponent(l.checklist) + '">' + esc(l.place || 'eBird checklist') + '</a>'
@@ -133,6 +165,131 @@
     // after collapsing a long list, bring the section back into view
     if (!lifersExpanded) $('#lifers-title').scrollIntoView({ block: 'nearest' });
   });
+
+  // ---------- Fact files: click a bird for everything known about it ----------
+  let rangesLoading = null;
+  const loadRanges = () => (rangesLoading = rangesLoading || fetch('data/ranges.json')
+    .then(r => r.ok ? r.json() : null).then(j => (j && j.ranges) || {}).catch(() => ({})));
+  let factOpener = null;                 // the button that opened it, to return focus there
+
+  async function openFactFile(sci, opener) {
+    const sp = checklist.species[checklist.bySci.get(String(sci).toLowerCase())];
+    if (!sp || !current) return;
+    factOpener = opener || null;
+    const dlg = $('#factfile');
+    $('#factfile-body').innerHTML = '<p class="working">Opening the fact file…</p>';
+    if (!dlg.open) dlg.showModal();
+    const [data, ranges] = await Promise.all([askTables(), loadRanges()]);
+    const row = data.species.find(r => r.scientific === sp.sci);
+    const lifer = current.d.lifers.find(l => l.sci === sp.sci);
+    const f = factFile_(sp, row, { lifer, range: ranges[sp.sci] || '', stickers });
+    $('#factfile-body').innerHTML = factFileHtml(f);
+    const st = current.d.stats && current.d.stats.species && current.d.stats.species[sp.i];
+    drawRangeMap(sp, st && st.points ? [...st.points.values()] : []);
+  }
+
+  // ---------- The range map: GBIF records by season, drawn in the page's own colours ----------
+  // GBIF (gbif.org) gathers bird records from eBird, museums and other surveys. Its map service
+  // sends the records for a species and months as a grid of cells (vector tiles); zoom 1 is four
+  // tiles, cells of about 150 km. Two seasons, so eight small requests, made only when a fact file opens.
+  const GBIF = 'https://api.gbif.org/';
+  const gbifKeys = new Map(), rangeCache = new Map();
+  async function gbifKey(sci) {
+    if (!gbifKeys.has(sci)) {
+      gbifKeys.set(sci, fetch(GBIF + 'v1/species/match?rank=SPECIES&strict=true&name=' + encodeURIComponent(sci))
+        .then(r => r.ok ? r.json() : null)
+        .then(m => (m && m.usageKey && m.rank === 'SPECIES' && m.matchType === 'EXACT' ? m.acceptedUsageKey || m.usageKey : null)));
+    }
+    return gbifKeys.get(sci);
+  }
+  async function seasonTiles(key, months) {
+    const tiles = await Promise.all([[0, 0], [0, 1], [1, 0], [1, 1]].map(async ([x, y]) => {
+      const res = await fetch(GBIF + 'v2/map/occurrence/adhoc/1/' + x + '/' + y + '.mvt?taxonKey=' + key + '&' + months +
+        '&basisOfRecord=HUMAN_OBSERVATION&occurrenceStatus=PRESENT&hasGeospatialIssue=false&mode=GEO_CENTROID&srs=EPSG:3857');
+      if (!res.ok) throw new Error('GBIF ' + res.status);
+      const buf = new Uint8Array(await res.arrayBuffer());
+      return buf.length ? readMvtPoints_(buf).points : [];
+    }));
+    return tiles.flat();
+  }
+  function loadRange(sci) {
+    if (!rangeCache.has(sci)) {
+      const p = gbifKey(sci).then(async key => {
+        if (!key) return { cells: [], key: null };
+        const [june, december] = await Promise.all([seasonTiles(key, 'month=6,7'), seasonTiles(key, 'month=12&month=1')]);
+        return { cells: seasonCells_(june, december), key };
+      });
+      p.catch(() => rangeCache.delete(sci));              // try again next time
+      rangeCache.set(sci, p);
+    }
+    return rangeCache.get(sci);
+  }
+  let worldShapes = null;
+  const loadWorld = () => (worldShapes = worldShapes || (countryShapes ? Promise.resolve(countryShapes)
+    : fetch(COUNTRIES_URL).then(r => r.json())));
+
+  async function drawRangeMap(sp, sightings) {
+    const box = $('#ff-map');
+    if (!box) return;
+    try {
+      const [range, world] = await Promise.all([loadRange(sp.sci), loadWorld()]);
+      if ($('#ff-map') !== box) return;                      // another bird was opened meanwhile
+      if (!range.cells.length && !sightings.length) { box.innerHTML = '<p class="ai-note">No mapped records for this species on GBIF.</p>'; return; }
+      box.innerHTML = rangeMapSvg_(range.cells, world, sightings);
+      if (range.key) $('#ff-map-credit').innerHTML = 'Records: <a href="https://www.gbif.org/species/' + range.key + '">GBIF.org</a>, including eBird. ' +
+        'June–July is summer in the north and winter in the south.';
+    } catch (e) {
+      if ($('#ff-map') === box) box.innerHTML = '<p class="ai-note">The map couldn\'t be loaded just now (' + esc(e.message) + ').</p>';
+    }
+  }
+
+  function factFileHtml(f) {
+    const list = (title, facts) => facts.length ? '<section class="ff-block"><h3>' + esc(title) + '</h3><dl>' +
+      facts.map(x => '<div><dt>' + esc(x.label) + '</dt><dd>' +
+        (x.label === 'Main habitat' && HABITAT_ICONS_[x.value] ? '<span class="icon habitat">' + habitatIconSvg_(x.value, 20) + '</span>' : '') +
+        esc(x.value) + (x.source ? ' <span class="src">' + esc(x.source) + '</span>' : '') + '</dd></div>').join('') + '</dl></section>' : '';
+    const rec = f.records;
+    const records = rec
+      ? '<section class="ff-block ff-mine"><h3>Your records</h3><dl>' +
+        '<div><dt>First seen</dt><dd>' + esc(date(new Date(rec.firstSeen + 'T12:00:00'))) +
+          (rec.firstPlace ? ' · ' + (rec.checklist ? '<a href="https://ebird.org/checklist/' + encodeURIComponent(rec.checklist) + '">' + esc(rec.firstPlace) + '</a>' : esc(rec.firstPlace)) : '') + '</dd></div>' +
+        '<div><dt>On your checklists</dt><dd>' + num(rec.checklists) + '</dd></div>' +
+        (rec.countries.length ? '<div><dt>Countries</dt><dd>' + esc(rec.countries.join(', ')) + '</dd></div>' : '') +
+        (rec.places.length ? '<div><dt>Places</dt><dd>' + esc(rec.places.slice(0, 12).join(', ')) + (rec.places.length > 12 ? ' and ' + num(rec.places.length - 12) + ' more' : '') + '</dd></div>' : '') +
+        '</dl></section>'
+      : '<section class="ff-block ff-mine"><h3>Your records</h3><p class="ai-note">Not on your list yet.</p></section>';
+    const regions = f.worldwide ? 'Found worldwide' : f.regions.join(', ');
+    return '<div class="ff-top">' +
+        '<figure class="ff-picture">' + (f.sticker
+          ? '<img src="' + esc(f.sticker.full) + '" alt="Illustration of a ' + esc(f.common) + '" width="320" height="320">' +
+            '<figcaption><span class="ai-label">AI illustration</span> ' + esc(stickers.credit.replace(/, CC BY 4.0$/, '')) +
+              ' · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></figcaption>'
+          : '<div class="ff-none">' + birdIconSvg_(birdShape_(f.familyLatin, f.order), 96) + '<p class="ai-note">No illustration for this species.</p></div>') +
+        '</figure>' +
+        '<div class="ff-head"><h2 id="factfile-title">' + esc(f.common) + '</h2><p class="sci">' + esc(f.sci) + '</p>' +
+          '<p class="ff-family">' + esc(f.family) + ' · <span class="sci">' + esc(f.familyLatin) + '</span> · ' + esc(f.order) + '</p>' +
+          (f.iucn ? '<p class="ff-iucn">' + iucnBadge(f.iucn) + ' ' + esc(f.iucnName) + ' <span class="src">IUCN Red List</span></p>' : '') +
+          (f.tags.length ? '<p class="ff-tags">' + f.tags.map(t => '<span class="tag">' + esc(t) + '</span>').join('') + '</p>' : '') +
+          (regions ? '<p class="ff-regions"><strong>Regions:</strong> ' + esc(regions) + '</p>' : '') +
+        '</div></div>' +
+      (f.range ? '<section class="ff-block ff-range"><h3>Where it lives</h3><p>' + esc(f.range) + ' <span class="src">AviList</span></p></section>' : '') +
+      '<section class="ff-block"><h3>Range map</h3><div id="ff-map" class="ff-map"><p class="working">Loading the map…</p></div>' +
+        '<ul class="ff-legend"><li><span class="sw june"></span>Recorded in June–July</li><li><span class="sw december"></span>December–January</li>' +
+        '<li><span class="sw both"></span>Both</li>' + (f.seen ? '<li><span class="sw mine"></span>Your sightings</li>' : '') + '</ul>' +
+        '<p id="ff-map-credit" class="ff-credit"></p></section>' +
+      '<div class="ff-grid">' + list('Size', f.size) + list('Life', f.life) + '</div>' +
+      records +
+      (f.links.length ? '<p class="ff-links">More: ' + f.links.map(l => '<a href="' + esc(l.url) + '">' + esc(l.label) + '</a>').join(' · ') + '</p>' : '');
+  }
+
+  // Any bird name button on the page opens its fact file
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('.bird-link');
+    if (b) openFactFile(b.dataset.sci, b);
+  });
+  $('#factfile-close').addEventListener('click', () => $('#factfile').close());
+  $('#factfile').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });   // a click outside the card
+  $('#factfile').addEventListener('close', () => { if (factOpener && document.contains(factOpener)) factOpener.focus(); });
 
   // ---------- Names to check: suggestions, Accept, Don't count it, Undo ----------
   const commonName = sci => { const i = checklist.bySci.get(String(sci).toLowerCase()); return i === undefined ? '' : checklist.species[i].common; };
@@ -311,15 +468,16 @@
     else text = v;
     const latin = ['scientific', 'familyLatin', 'order'].includes(col.field);
     const words = latin ? '<span class="sci">' + esc(text) + '</span>' : esc(text);
+    if (col.field === 'iucn') return '<td>' + iucnBadge(v) + '</td>';
     // Habitats get a small drawing (habitat-icons.js)
     if (col.field === 'habitat' && HABITAT_ICONS_[v]) {
       return '<td><span class="with-icon"><span class="icon habitat" title="' + esc(HABITAT_ICONS_[v].label) + '">' +
         habitatIconSvg_(v, 20) + '</span>' + words + '</span></td>';
     }
     if (!kind) return '<td' + cls + '>' + words + '</td>';
-    const shape = birdShape_(kind.familyLatin, kind.order);
-    return '<td' + cls + '><span class="with-icon"><span class="icon" title="' + esc(SHAPES[shape].label) + '">' +
-      birdIconSvg_(shape, 22) + '</span>' + words + '</span></td>';
+    // Species rows: the bird's sticker, and its name opens the fact file. Families and orders: a silhouette.
+    return '<td' + cls + '><span class="with-icon">' + birdIcon(kind.sci, kind.familyLatin, kind.order, 28) +
+      (kind.sci ? birdButton(kind.sci, words) : words) + '</span></td>';
   }
 
   async function renderAsk() {
@@ -328,6 +486,7 @@
     if (!lastAsk || !current) return;                    // cleared while the totals loaded
     const q = lastAsk.query, res = runQuery_(q, data);
     const noun = ASK_TABLES_[q.table].noun[res.total === 1 ? 0 : 1];
+    const sciCol = q.table === 'species' ? res.columns.findIndex(c => c.field === 'scientific') : -1;   // species rows open fact files
     $('#ask-result').innerHTML =
       '<div class="understood"><span class="label">Understood as</span>' + esc(describeQuery_(q)) +
         (lastAsk.backup ? backupNote(lastAsk.backup) : '') +
@@ -339,7 +498,7 @@
             res.columns.map(c => '<th' + (c.type === 'number' ? ' class="num"' : '') + ' scope="col">' + esc(c.label) + '</th>').join('') +
           '</tr></thead><tbody>' +
             res.rows.map((r, ri) => '<tr>' + r.map((v, i) => i === 0 && BIRD_TABLES.includes(q.table)
-              ? askCell(res.columns[i], v, res.kinds[ri]) : askCell(res.columns[i], v)).join('') + '</tr>').join('') +
+              ? askCell(res.columns[i], v, Object.assign({ sci: sciCol >= 0 ? r[sciCol] : '' }, res.kinds[ri])) : askCell(res.columns[i], v)).join('') + '</tr>').join('') +
           '</tbody></table></div>'
         : '') +
       // Only when the question didn't say how many: a hint that more can be asked for

@@ -28,7 +28,8 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 - **The count:** species, families, orders and countries seen, as a share of the world's living birds, plus threatened species (IUCN Vulnerable or worse).
 - **Where in the world:** a map of countries birded, shaded by the % of the species recorded there (eBird) that you've seen, and bars showing how much of each region's birds you've seen. Click a country to zoom into its states and provinces (counties in the UK, France, Ireland and Indonesia), shaded the same way, with species, lifers and the % of the species eBird has recorded there.
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
-- **Latest lifers:** the first time each species was seen, with a search box and a field-guide silhouette of each bird's body shape (heron, wader, owl, finch…). All 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
+- **Latest lifers:** the first time each species was seen, with a search box and an illustrated sticker of each bird. Where a species has no sticker, a field-guide silhouette of its body shape (heron, wader, owl, finch…) stands in: all 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
+- **Fact files:** click any bird, in the lifer list or an answer, for its fact file: a large illustration, AviList's description of where it lives, a seasonal range map, its IUCN status (colour-coded, green for Least Concern through to red for Critically Endangered), size and life history (each fact labelled with its source), your own records, and links to eBird and Bird Album.
 - **Names to check:** every eBird name that doesn't match AviList, with an AI-assisted suggestion you can accept, change or ignore.
 - **Ask your list:** questions in plain English, answered from your own data, with the same silhouettes beside species, families and orders. It goes down to states, provinces and counties too: *Which county have I seen the most species in? What have I seen in Suffolk? My first lifer in each Australian state?* And it knows each bird's size, range, habitat, diet, altitude, eggs and nest, from two scientific datasets: *What's the heaviest bird I've seen? Which of my birds have the smallest ranges? What nectar feeders have I seen?* Each habitat in an answer gets a small line drawing (forest, wetland, coast, desert…).
 
@@ -83,6 +84,21 @@ A public website can't contain an API key, because anyone could copy it. So the 
 
 If both models are unavailable or the cap is reached, **the rest of the site keeps working**: string matching still suggests fixes, and only the AI parts pause.
 
+## Stickers and fact files
+
+Every bird has an illustrated sticker from [huashu-bird-sticker](https://github.com/alchaincyf/huashu-bird-sticker) (by Huashu, for the [Bird Album](https://birdalbum.com) guide), which follows AviList v2026 like this site, so the names match exactly: **11,007 of the 11,025 living species** have one. The 18 without are birds AviList flags as possibly extinct.
+
+- **Licence:** CC BY 4.0, so they can be used and resized with credit. The credit is under every large picture and in the footer.
+- **AI-generated, and labelled so.** The stickers are AI illustrations, which their author marks as not checked by experts. The fact file says "AI illustration" beside each one. Most were drawn from a reference photo whose rights stay with the photographer; the photos aren't distributed, and the project has a takedown process.
+- **Pinned to one version.** The library changed licence on 5 Nov 2026 (to CC BY, from a more restrictive one), so the site uses one exact commit (`3b42ef8`, v2.3.6), not "latest": the pictures can't change or disappear under it.
+- **Small icons, full pictures only when asked.** Each sticker is about 75 KB, so a 25-row answer would cost 2 MB just for icons. `tools/build-factfiles.js` makes a 96-pixel copy of each (about 2 KB, 23 MB for all 11,000), kept with the site and loaded only as they scroll into view. The full sticker loads from the pinned CDN only when a fact file opens. If a sticker is missing or fails to load, the family silhouette is shown instead.
+- **AviList's range text** ("Breeds in…") is in a separate file loaded the first time a fact file opens, so it doesn't slow the page down.
+
+**Range maps, from open data.** Apps like Merlin draw range maps from licensed sources that can't be republished. Instead, the fact file asks [GBIF](https://www.gbif.org), the open global database of species records (which includes eBird's), where the species was recorded in **June–July** and in **December–January**, and colours each grid cell like a field guide: warm for June–July, blue for December–January, purple for both, with your own sightings as green dots. It says "June–July", not "breeding season", because June is winter in the southern hemisphere. Details:
+- GBIF sends the records as *vector tiles* (a compact binary format). Rather than add a mapping library, the site decodes them with a small, tested reader (`readMvtPoints_`) and draws the map as SVG in the page's own colours.
+- For common birds, cells with only a handful of records are left out, so one stray doesn't look like part of the range. The map is framed on the middle 95% of the cells, not of the records: counting records centred the bullfinch on Europe, where most birdwatchers are, and cut off its range across Asia to Japan.
+- These are *records*, not a modelled range: well-watched places look fuller than remote ones, and introduced and escaped birds appear too (Java Sparrow shows up on four continents).
+
 ## Bird traits: two scientific datasets, combined carefully
 
 "Ask your list" can answer questions about size, range, habitat and diet because every species is joined to two published, peer-reviewed datasets (both CC BY 4.0):
@@ -99,12 +115,15 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
 
 ## Testing
 
-- **121 automated tests** (`node --test`) cover:
+- **133 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers
   - Lyrebird's request checks, run against fake Google services, so no real key or internet is needed
   - the query checker, which has to reject unknown tables and fields, the wrong value types, and tampered replies
+  - the fact files: every fact labelled with its source, unknown facts left out, made-up checklist IDs not linked, and a thumbnail present for every species with a sticker
+  - the range map: reading GBIF's vector tiles (from a tile built by hand in the test), grid cells, the projection, sorting by season, leaving out strays, and framing
+  - a syntax check on the page's own scripts
   - the trait data: unpacking the compact file, filtering and sorting by weight, habitat, diet and nest, and unknown values never matching
   - a check that the website's copies of the shared code are up to date
   - a check that every AviList family has a silhouette, so a new AviList edition can't quietly leave a bird without one
@@ -168,6 +187,7 @@ Some things I learned along the way:
 | `AskYourList.gs` | The question tool: allowed tables, prompt, query checker, runner and description (shared) |
 | `Lyrebird/Lyrebird.gs` | The AI middleman web app |
 | `tools/build-traits.js` | Joins AVONET and BIRDBASE to AviList (weight, range, habitat, diet, nests…) and writes the coverage report |
+| `tools/build-factfiles.js` | Builds the sticker thumbnails, the sticker index and AviList's range text for the fact files |
 | `docs/js/habitat-icons.js` | A line drawing for each of BIRDBASE's 14 main habitats, shown beside habitats in answers |
 | `docs/js/bird-icons.js` | The body-shape silhouettes: which shape each family gets, and the numbers each shape is drawn from |
 | `docs/` | The website, served by GitHub Pages. `docs/lib/` holds generated copies of the shared `.gs` files |
@@ -195,5 +215,7 @@ Follow the instructions at the top of [`LifeList.gs`](LifeList.gs), or the [setu
 - **Checklist:** AviList Core Team. 2026. *AviList: The Global Avian Checklist, v2026.* https://doi.org/10.2173/avilist.v2026. Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), and converted to a smaller format for this site.
 - **Sightings and regional species totals:** [eBird](https://ebird.org) (Cornell Lab of Ornithology). This project isn't affiliated with eBird or AviList.
 - **Map:** country and state/province outlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain), drawn with [Leaflet](https://leafletjs.com/). **Charts:** [Chart.js](https://www.chartjs.org/).
+- **Range maps:** occurrence records from [GBIF.org](https://www.gbif.org), including eBird, fetched when a fact file opens.
+- **Bird illustrations:** [huashu-bird-sticker](https://github.com/alchaincyf/huashu-bird-sticker) v2.3.6 by Huashu (Bird Album), CC BY 4.0. AI-generated; resized for the icons.
 - **Bird traits:** AVONET (Tobias, J.A. et al. 2022, *Ecology Letters* 25: 581–597, https://doi.org/10.1111/ele.13898) and BIRDBASE v2025.1 (Şekercioğlu, Ç.H. et al. 2025, *Scientific Data*, https://doi.org/10.1038/s41597-025-05615-3), both CC BY 4.0, joined to AviList and converted to a smaller format.
 - **AI:** OpenAI's GPT-OSS 120B on Groq, with Google Gemini as the backup, through Lyrebird.

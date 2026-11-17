@@ -19,3 +19,10 @@ test('the sample data contains only the agreed columns', () => {
   const first = fs.readFileSync(path.join(__dirname, '..', 'docs', 'data', 'sample-ebird.csv'), 'utf8').split('\n')[0];
   assert.equal(first, 'Submission ID,Common Name,Scientific Name,State/Province,County,Location ID,Location,Latitude,Longitude,Date,Time');
 });
+
+test('the page scripts have no syntax errors (they aren\'t loaded by any other test)', () => {
+  const { execFileSync } = require('node:child_process');
+  for (const f of ['docs/js/app.js', 'docs/js/config.js', 'docs/js/habitat-icons.js', 'docs/js/bird-icons.js']) {
+    execFileSync(process.execPath, ['--check', path.join(__dirname, '..', f)]);      // throws on a syntax error
+  }
+});
