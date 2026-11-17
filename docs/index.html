@@ -26,9 +26,23 @@
       <a href="https://www.avilist.org/">AviList</a>, the global checklist of the world's birds.</p>
 
     <div id="controls" class="controls" hidden>
-      <label class="button primary">
+      <label class="button primary upload">
         <input id="file" type="file" accept=".csv,text/csv,.zip">
         Upload MyEBirdData.csv
+        <!-- Binoculars hanging by their strap from the button's corner (decoration only) -->
+        <svg class="binoculars" viewBox="0 0 50 72" aria-hidden="true" focusable="false">
+        <path class="strap" d="M46 4 C40 6 30 14 21 31 M46 4 C44 10 40 20 37 31" />
+        <path class="strap-loop" d="M43 6 C43 1 49 1 49 5" />
+        <g class="body">
+          <rect x="13" y="33" width="15" height="31" rx="5" /><rect x="31" y="33" width="15" height="31" rx="5" />
+          <rect x="26" y="38" width="7" height="9" rx="2" />
+        </g>
+        <circle class="hinge" cx="29.5" cy="42.5" r="2.4" />
+        <rect class="cup" x="15" y="28" width="11" height="7" rx="2" /><rect class="cup" x="33" y="28" width="11" height="7" rx="2" />
+        <rect class="lug" x="19" y="30" width="4" height="4" rx="1" /><rect class="lug" x="36" y="30" width="4" height="4" rx="1" />
+        <ellipse class="lens" cx="20.5" cy="64" rx="6.5" ry="2.6" /><ellipse class="lens" cx="38.5" cy="64" rx="6.5" ry="2.6" />
+        <path class="glint" d="M16.5 37v20 M34.5 37v20" />
+      </svg>
       </label>
       <button id="sample" class="button" type="button">Try with sample data</button>
       <label class="dropzone" for="file">
@@ -56,12 +70,23 @@
 
   <main id="dashboard" hidden>
 
-    <section class="plate" aria-labelledby="count-title">
+    <!-- Buttons to jump to each section; the one you're reading is highlighted (app.js) -->
+    <nav id="section-nav" class="section-nav" aria-label="Sections">
+      <a href="#count-plate">The count</a>
+      <a href="#world-plate">Where in the world</a>
+      <a href="#years-plate">Through the years</a>
+      <a href="#lifers-plate">Latest lifers</a>
+      <a href="#ask-plate">Ask your list</a>
+      <a href="#quiz-plate">Test yourself</a>
+      <a href="#unmatched-plate">Names to check</a>
+    </nav>
+
+    <section id="count-plate" class="plate" aria-labelledby="count-title">
       <h2 id="count-title">The count</h2>
       <div id="stats" class="stats"></div>
     </section>
 
-    <section class="plate" aria-labelledby="world-title">
+    <section id="world-plate" class="plate" aria-labelledby="world-title">
       <h2 id="world-title">Where in the world</h2>
       <p class="caption">The countries you've birded in, shaded by the share of the species ever recorded there (eBird) that you've seen. The bars show how many of the birds regularly found in each region (breeding, wintering or on migration) you've seen, wherever you saw them. Rare vagrants aren't included. Tap or hover over a country for details, and click a birded country to see its states and provinces.</p>
       <div class="world">
@@ -75,7 +100,7 @@
       </div>
     </section>
 
-    <section class="plate" aria-labelledby="years-title">
+    <section id="years-plate" class="plate" aria-labelledby="years-title">
       <h2 id="years-title">Through the years</h2>
       <p class="caption">New species by year, and by month of the year to show the seasons (every year counted together).
         Below: every species recorded, lifer or not, with the number of checklists as a guide to how much birding was done.</p>
@@ -87,7 +112,7 @@
       </div>
     </section>
 
-    <section class="plate" aria-labelledby="lifers-title">
+    <section id="lifers-plate" class="plate" aria-labelledby="lifers-title">
       <h2 id="lifers-title">Latest lifers</h2>
       <p class="caption">The first time each species was recorded, newest first. Search to find any of them, and click a bird for its fact file.</p>
       <div class="lifer-tools">
@@ -124,6 +149,28 @@
       <div id="ask-result" class="ask-result" aria-live="polite"></div>
     </section>
 
+    <section id="quiz-plate" class="plate" aria-labelledby="quiz-title">
+      <h2 id="quiz-title">Test yourself</h2>
+      <p class="caption">Can you name your own lifers from a picture? Ten birds a round.</p>
+      <div id="quiz-setup" class="quiz-setup">
+        <fieldset class="quiz-choice">
+          <legend>Answer by</legend>
+          <label><input type="radio" name="quiz-mode" value="choice" checked> Choosing from four names</label>
+          <label><input type="radio" name="quiz-mode" value="typed"> Typing the name</label>
+        </fieldset>
+        <fieldset class="quiz-choice" id="quiz-level">
+          <legend>Difficulty</legend>
+          <label><input type="radio" name="quiz-level" value="easy" checked> Easy: the other names are any of your lifers</label>
+          <label><input type="radio" name="quiz-level" value="hard"> Hard: the other names are lookalikes from the same family</label>
+        </fieldset>
+        <button id="quiz-start" type="button" class="button primary">Start a round</button>
+        <p id="quiz-best" class="ai-note"></p>
+      </div>
+      <div id="quiz-game" class="quiz-game" hidden></div>
+      <p class="ai-note quiz-small">The pictures are AI illustrations (huashu-bird-sticker) and a few may not look exactly like the bird.
+        Typed answers can use any of the bird's names, with or without capitals, and small spelling slips are forgiven.</p>
+    </section>
+
     <section id="unmatched-plate" class="plate" aria-labelledby="unmatched-title">
       <h2 id="unmatched-title">Names to check</h2>
       <p class="caption">These eBird names don't match an AviList species yet, often because the two checklists
@@ -139,6 +186,7 @@
         <p class="ai-note">Saved in this browser only.</p>
       </div>
     </section>
+
   </main>
 
   <!-- A bird's fact file: opened by clicking its name in Latest lifers or an Ask your list answer -->

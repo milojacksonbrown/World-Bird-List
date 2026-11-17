@@ -87,6 +87,7 @@
     renderAsk();                               // re-runs the last question on the new numbers (e.g. after a fix)
 
     renderNameFixes(d);
+    quizReset();                               // a new file: back to the start screen
 
     $('#dashboard').hidden = false;     // must be visible before the map and charts measure their size
     renderRegions(d);
@@ -301,12 +302,144 @@
   $('#factfile').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });   // a click outside the card
   $('#factfile').addEventListener('close', () => { if (factOpener && document.contains(factOpener)) factOpener.focus(); });
 
+  // ---------- Section buttons: highlight the section being read ----------
+  // A section counts as "being read" once its top passes a line a third of the way down the window.
+  if (window.IntersectionObserver) {
+    const navLinks = [...document.querySelectorAll('#section-nav a')];
+    const seen = new Map();
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => seen.set(e.target.id, e.isIntersecting));
+      const reading = navLinks.map(a => a.getAttribute('href').slice(1)).filter(id => seen.get(id));
+      navLinks.forEach(a => a.classList.toggle('here', a.getAttribute('href') === '#' + reading[0]));
+    }, { rootMargin: '-30% 0px -60% 0px' });
+    navLinks.forEach(a => { const sec = $(a.getAttribute('href')); if (sec) io.observe(sec); });
+  }
+
+  // ---------- Test yourself: name your lifers from their stickers ----------
+  const QUIZ_LENGTH = 10;
+  let quiz = null;                     // { mode, level, birds, i, score, missed, answered, options }
+  const quizBestKey = (mode, level) => 'lifelist.quizBest.' + mode + (mode === 'choice' ? '.' + level : '');
+  const readBest = k => { try { return Number(localStorage.getItem(k)) || 0; } catch (e) { return 0; } };
+  const quizSetting = name => (document.querySelector('input[name="' + name + '"]:checked') || {}).value;
+
+  function quizReset() {
+    quiz = null;
+    $('#quiz-game').hidden = true;
+    $('#quiz-setup').hidden = false;
+    quizSettingsChanged();
+  }
+  function quizSettingsChanged() {
+    const mode = quizSetting('quiz-mode'), level = quizSetting('quiz-level');
+    $('#quiz-level').hidden = mode !== 'choice';                 // difficulty is about the four names
+    const best = readBest(quizBestKey(mode, level));
+    $('#quiz-best').textContent = best ? 'Your best this way: ' + best + ' out of ' + QUIZ_LENGTH + '.' : '';
+  }
+  document.querySelectorAll('#quiz-setup input').forEach(r => r.addEventListener('change', quizSettingsChanged));
+
+  $('#quiz-start').addEventListener('click', () => {
+    if (!current) return;
+    const pool = quizPool_(current.d.lifers, checklist, stickers);
+    if (pool.length < 4) {
+      $('#quiz-best').textContent = 'The quiz needs at least four lifers with pictures.';
+      return;
+    }
+    quiz = { mode: quizSetting('quiz-mode'), level: quizSetting('quiz-level'), pool,
+      birds: shuffled_(pool, Math.random).slice(0, QUIZ_LENGTH), i: 0, score: 0, missed: [] };
+    $('#quiz-setup').hidden = true;
+    $('#quiz-game').hidden = false;
+    quizQuestion();
+  });
+
+  function quizQuestion() {
+    const sp = quiz.birds[quiz.i], st = stickerFor_(sp, stickers);
+    quiz.answered = false;
+    quiz.options = quiz.mode === 'choice'
+      ? quizOptions_(sp, quiz.pool, quiz.level, Math.random, x => birdShape_(x.family, x.order)) : null;
+    const next = quiz.birds[quiz.i + 1];
+    if (next) new Image().src = stickerFor_(next, stickers).full;   // fetch the next picture while this one is answered
+    $('#quiz-game').innerHTML =
+      '<div class="quiz-top"><span>Bird ' + (quiz.i + 1) + ' of ' + quiz.birds.length + '</span><span>Score: ' + quiz.score + '</span></div>' +
+      '<figure class="quiz-picture"><img src="' + esc(st.full) + '" alt="A bird to name" width="300" height="300"></figure>' +
+      '<p class="quiz-ask">What\'s this bird?</p>' +
+      (quiz.mode === 'choice'
+        ? '<div class="quiz-options">' + quiz.options.map((o, n) =>
+            '<button type="button" class="button quiz-option" data-n="' + n + '">' + esc(o.common) + '</button>').join('') + '</div>'
+        : '<form class="quiz-typed" autocomplete="off"><label for="quiz-input" class="visually-hidden">The bird\'s name</label>' +
+          '<input id="quiz-input" type="text" maxlength="80" placeholder="e.g. Eurasian Bullfinch">' +
+          '<button type="submit" class="button primary">Check</button>' +
+          '<button type="button" class="button quiz-giveup">I don\'t know</button></form>') +
+      '<div class="quiz-feedback" aria-live="polite"></div>' +
+      '<div class="quiz-nav" hidden><button type="button" class="button primary quiz-next">' +
+        (quiz.i + 1 < quiz.birds.length ? 'Next bird' : 'See your score') + '</button></div>';
+    const input = $('#quiz-input');
+    if (input) input.focus({ preventScroll: true });
+  }
+
+  function quizAnswer(correct, note) {
+    if (quiz.answered) return;
+    quiz.answered = true;
+    const sp = quiz.birds[quiz.i];
+    if (correct) quiz.score++; else quiz.missed.push(sp);
+    $('#quiz-game .quiz-top span:last-child').textContent = 'Score: ' + quiz.score;
+    $('#quiz-game .quiz-feedback').innerHTML = (correct
+      ? '<p class="quiz-right">Correct' + (note ? ' (' + esc(note) + ')' : '') + '!</p>'
+      : '<p class="quiz-wrong">Not this time. It\'s ' + (/^[aeiou]/i.test(sp.common) ? 'an' : 'a') + ' <strong>' + esc(sp.common) + '</strong>.</p>') +
+      '<p class="quiz-more">' + birdButton(sp.sci, 'Open the ' + esc(sp.common) + ' fact file') + '</p>';
+    $('#quiz-game').querySelectorAll('.quiz-option, .quiz-typed input, .quiz-typed button').forEach(b => { b.disabled = true; });
+    if (quiz.options) quiz.options.forEach((o, n) => {
+      const b = $('#quiz-game .quiz-option[data-n="' + n + '"]');
+      if (o.sci === sp.sci) b.classList.add('right');
+    });
+    $('#quiz-game .quiz-nav').hidden = false;
+    $('#quiz-game .quiz-next').focus({ preventScroll: true });
+  }
+
+  function quizEnd() {
+    const key = quizBestKey(quiz.mode, quiz.level), best = readBest(key), newBest = quiz.score > best;
+    if (newBest) { try { localStorage.setItem(key, String(quiz.score)); } catch (e) { /* storage blocked: no record kept */ } }
+    $('#quiz-game').innerHTML =
+      '<div class="quiz-result"><p class="quiz-final">' + quiz.score + ' out of ' + quiz.birds.length + '</p>' +
+      '<p>' + (newBest ? 'A new best!' : best ? 'Your best this way: ' + best + '.' : '') + '</p>' +
+      (quiz.missed.length
+        ? '<p class="quiz-missed-title">Birds to look at again:</p><ul class="quiz-missed">' + quiz.missed.map(sp =>
+            '<li>' + birdIcon(sp.sci, sp.family, sp.order, 36) + birdButton(sp.sci, esc(sp.common)) + '</li>').join('') + '</ul>'
+        : '<p>You named every one.</p>') +
+      '<p class="quiz-again"><button type="button" class="button primary quiz-replay">Play again</button> ' +
+      '<button type="button" class="button quiz-change">Change the settings</button></p></div>';
+  }
+
+  $('#quiz-game').addEventListener('click', e => {
+    if (!quiz) return;
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.classList.contains('quiz-option')) {
+      const pick = quiz.options[Number(t.dataset.n)], sp = quiz.birds[quiz.i];
+      if (pick.sci !== sp.sci) t.classList.add('wrong');
+      quizAnswer(pick.sci === sp.sci, '');
+    } else if (t.classList.contains('quiz-giveup')) quizAnswer(false, '');
+    else if (t.classList.contains('quiz-next')) {
+      quiz.i++;
+      if (quiz.i < quiz.birds.length) quizQuestion(); else quizEnd();
+      $('#quiz-plate').scrollIntoView({ block: 'nearest' });
+    } else if (t.classList.contains('quiz-replay')) $('#quiz-start').click();
+    else if (t.classList.contains('quiz-change')) quizReset();
+  });
+  $('#quiz-game').addEventListener('submit', e => {
+    e.preventDefault();
+    if (!quiz || quiz.answered) return;
+    const typed = $('#quiz-input').value;
+    if (!typed.trim()) return;
+    const res = quizCheck_(typed, quiz.birds[quiz.i], checklist);
+    quizAnswer(res.correct, res.note);
+  });
+
   // ---------- Names to check: suggestions, Accept, Don't count it, Undo ----------
   const commonName = sci => { const i = checklist.bySci.get(String(sci).toLowerCase()); return i === undefined ? '' : checklist.species[i].common; };
 
   function renderNameFixes(d) {
     const fixes = getFixes();
     $('#unmatched-plate').hidden = !d.unmatched.length && !fixes.size;
+    $('#section-nav a[href="#unmatched-plate"]').hidden = $('#unmatched-plate').hidden;   // no button for a hidden section
     $('#unmatched').innerHTML = d.unmatched.map((u, i) =>
       '<li data-i="' + i + '">' +
         '<div class="um-name"><span class="sci">' + esc(u.sci) + '</span> ' + esc(u.common) +
@@ -1056,7 +1189,7 @@
     const textBox = el => { const rg = document.createRange(); rg.selectNodeContents(el); return pageBox(rg.getBoundingClientRect()); };
     const blocked = [];
     [...document.querySelectorAll('.masthead > *, .colophon > *')].filter(el => el.offsetParent && !el.hidden).forEach(el => {
-      if (el.id === 'controls') [...el.children].forEach(c => blocked.push(pageBox(c.getBoundingClientRect())));
+      if (el.id === 'controls') [...el.children, ...el.querySelectorAll('.binoculars')].forEach(c => blocked.push(pageBox(c.getBoundingClientRect())));
       else if (el.tagName === 'DETAILS') blocked.push(textBox(el.querySelector('summary')));
       else if (el.textContent.trim()) blocked.push(textBox(el));
     });

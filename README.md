@@ -25,10 +25,12 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 
 ## What it does
 
+- **Section buttons** at the top of the results jump to each part of the page; on wider screens they stay at the top of the window as you scroll, with the section you're reading highlighted.
 - **The count:** species, families, orders and countries seen, as a share of the world's living birds, plus threatened species (IUCN Vulnerable or worse).
 - **Where in the world:** a map of countries birded, shaded by the % of the species recorded there (eBird) that you've seen, and bars showing how much of each region's birds you've seen. Click a country to zoom into its states and provinces (counties in the UK, France, Ireland and Indonesia), shaded the same way, with species, lifers and the % of the species eBird has recorded there.
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
 - **Latest lifers:** the first time each species was seen, newest first (the latest 10, then 50, 100 or all, with Show fewer at the top and bottom), with a search box and an illustrated sticker of each bird. Where a species has no sticker, a field-guide silhouette of its body shape (heron, wader, owl, finch…) stands in: all 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
+- **Test yourself:** a quiz on your own lifers. A sticker appears and you name the bird, choosing from four names or typing it. In *hard* mode the wrong answers are lookalikes from the same family (woodswallows against butcherbirds); typed answers accept any of the bird's names, American spellings, the scientific name, the name without its first word ("Bullfinch") when no other bird has that name, and small spelling slips (one letter in eight). Ten birds a round, with the ones you missed to look at again and your best score kept in your browser.
 - **Your birds around the page:** once your file loads, 25 of your lifers, picked at random each time, appear as stickers around the title, down the margins and by the footer, in fixed places chosen never to cover the text. Click one for its fact file.
 - **Fact files:** click any bird, in the lifer list or an answer, for its fact file: a large illustration, AviList's description of where it lives, a seasonal range map, its IUCN status (colour-coded, green for Least Concern through to red for Critically Endangered), size and life history (each fact labelled with its source), your own records, and links to eBird and Bird Album.
 - **Names to check:** every eBird name that doesn't match AviList, with an AI-assisted suggestion you can accept, change or ignore.
@@ -116,7 +118,7 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
 
 ## Testing
 
-- **133 automated tests** (`node --test`) cover:
+- **139 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers
@@ -124,6 +126,7 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
   - the query checker, which has to reject unknown tables and fields, the wrong value types, and tampered replies
   - the fact files: every fact labelled with its source, unknown facts left out, made-up checklist IDs not linked, and a thumbnail present for every species with a sticker
   - the range map: reading GBIF's vector tiles (from a tile built by hand in the test), grid cells, the projection, sorting by season, leaving out strays, and framing
+  - the quiz: lookalike wrong answers, and which typed answers count (spellings, other names, slips, short names) and which don't
   - a syntax check on the page's own scripts
   - the trait data: unpacking the compact file, filtering and sorting by weight, habitat, diet and nest, and unknown values never matching
   - a check that the website's copies of the shared code are up to date

@@ -881,3 +881,85 @@ function rangeMapSvg_(cells, countries, sightings) {
     '<g class="mine">' + (sightings || []).map(([la, lo]) => { const [x, y] = P(la, lo); return '<circle cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + dotR + '"/>'; }).join('') + '</g>' +
     '</svg>';
 }
+
+// ---------- The bird quiz: name your lifers from their stickers ----------
+
+/** Shuffles a copy of a list, using the given random number function (0 to 1). */
+function shuffled_(list, rnd) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+/** The birds a quiz can ask about: your lifers that have a sticker, as checklist species. */
+function quizPool_(lifers, checklist, stickers) {
+  return (lifers || []).map(l => checklist.species[l.i]).filter(sp => sp && stickerFor_(sp, stickers));
+}
+
+/**
+ * The four names for a multiple-choice question: the answer and three others from your
+ * own lifers. "hard" picks birds that look alike first: the same family, then the same
+ * order, then the same body shape; "easy" picks any. Names are never repeated.
+ * @param {Object} answer  a checklist species
+ * @param {Array} pool  from quizPool_
+ * @param {'easy'|'hard'} level
+ * @param {Function} rnd  random number function
+ * @param {Function} [shapeOf]  species -> body shape (bird-icons.js), for "hard"
+ */
+function quizOptions_(answer, pool, level, rnd, shapeOf) {
+  const others = shuffled_(pool.filter(sp => sp.common !== answer.common), rnd);
+  const tiers = level === 'hard'
+    ? [sp => sp.family === answer.family, sp => sp.order === answer.order,
+       sp => !!shapeOf && shapeOf(sp) === shapeOf(answer), () => true]
+    : [() => true];
+  const picked = [];
+  tiers.forEach(fits => others.forEach(sp => {
+    if (picked.length < 3 && fits(sp) && !picked.some(p => p.common === sp.common)) picked.push(sp);
+  }));
+  return shuffled_([answer].concat(picked), rnd);
+}
+
+/** A name made comparable: no capitals, accents, hyphens or apostrophes, and "grey" as "gray". */
+function quizName_(s) {
+  return normCommon_(s).replace(/\bgrey/g, 'gray');
+}
+
+/** How many single-letter changes turn one word into another (Levenshtein distance). */
+function editDistance_(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) row.push(Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)));
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Checks a typed answer. Correct if it matches the AviList name, one of its other names
+ * (e.g. American spellings) or the scientific name; a small spelling slip is forgiven
+ * (one letter in eight); and the name without its first word ("Bullfinch" for "Eurasian
+ * Bullfinch") counts, unless that's another species' name.
+ * @param {string} typed
+ * @param {Object} sp  the checklist species asked about
+ * @param {Object} checklist  for the names of every species (byCommon)
+ * @return {{correct: boolean, note: string}}  note: what was forgiven, if anything
+ */
+function quizCheck_(typed, sp, checklist) {
+  const t = quizName_(typed);
+  if (!t) return { correct: false, note: '' };
+  const names = [sp.common].concat(String(sp.alt || '').split(';')).map(s => s.trim()).filter(Boolean);
+  const sci = String(sp.sci).toLowerCase();
+  if (names.some(n => quizName_(n) === t) || String(typed).trim().toLowerCase().replace(/\s+/g, ' ') === sci) return { correct: true, note: '' };
+  for (const n of names) {
+    const want = quizName_(n);
+    if (editDistance_(t, want) <= Math.max(1, Math.floor(want.length / 8))) return { correct: true, note: 'spelled ' + n };
+  }
+  // The name without its first word, if no other bird is called that
+  const short = quizName_(sp.common).split(' ').slice(1).join(' ');
+  const other = checklist && checklist.byCommon && checklist.byCommon.get(normCommon_(short));
+  if (short.length >= 4 && (other === undefined || other === sp.i) && (t === short || editDistance_(t, short) <= Math.floor(short.length / 8))) {
+    return { correct: true, note: 'in full, ' + sp.common };
+  }
+  return { correct: false, note: '' };
+}
