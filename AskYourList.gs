@@ -90,6 +90,7 @@ const ASK_TABLES_ = {
       elevationMin: ['number', 'Lowest (m)', 'usual lowest altitude it lives at, in metres'],
       elevationMax: ['number', 'Highest (m)', 'usual highest altitude it lives at, in metres'],
       clutchMax: ['number', 'Eggs (max)', 'largest usual clutch, in eggs'],
+      nestSite: ['list', 'Nest site', 'where it nests: Tree, Ground, Shrub, Rock, Grass, Building, Stump, Bamboo, Pole, Water, Cactus or Other animal\'s nest'],
       nest: ['list', 'Nest', 'Cup, Tree cavity, Dome, Sphere, Platform, Scrape, Burrow, Pendant, Half cup, Saucer, Mound, Crevice, No nest or Other bird\'s nest'],
     },
     show: ['common', 'scientific', 'family', 'habitat', 'firstSeen', 'firstPlace'],   // habitat always, with its drawing

@@ -338,7 +338,10 @@
     const list = (title, facts) => facts.length ? '<section class="ff-block"><h3>' + esc(title) + '</h3><dl>' +
       facts.map(x => '<div><dt>' + esc(x.label) + '</dt><dd>' +
         (x.label === 'Main habitat' && HABITAT_ICONS_[x.value] ? '<span class="icon habitat">' + habitatIconSvg_(x.value, 20) + '</span>' + esc(x.value)
-          : x.label === 'Nest' ? nestWithIcons(x.value.split(' or ')).join(' <span class="or">or</span> ')
+          : x.nest ? nestWithIcons(x.nest).join(' <span class="or">or</span> ')
+            : x.sites ? x.sites.map((st, i) => '<span class="with-nest">' + (NEST_SITE_ICONS_[st] ? '<span class="icon nest" title="' + esc(NEST_SITE_ICONS_[st].label) + '">' +
+                nestSiteIconSvg_(st, 20) + '</span>' : '') + esc(nestSiteWords_(st, i > 0)) + '</span>').join(' <span class="or">or</span> ') + ' <span class="or">(type not recorded)</span>'
+            : x.missing ? '<span class="not-recorded">' + esc(x.value) + '</span>'
             : esc(x.value)) +
         (x.source ? ' <span class="src">' + esc(x.source) + '</span>' : '') + '</dd></div>').join('') + '</dl></section>' : '';
     const rec = f.records;

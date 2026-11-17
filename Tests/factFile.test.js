@@ -54,11 +54,28 @@ test('a fact file: names, status, size and life facts with their sources, and my
   assert.deepEqual(f.tags, []);
 });
 
+test('nest: the type if recorded, else where the nest is, else "Not recorded"', () => {
+  const nest = row => call('factFile_', EAGLE, row, {}).life.find(x => x.label === 'Nest');
+  assert.deepEqual(nest({ nest: ['Platform'], nestSite: ['Tree'] }), { label: 'Nest', value: 'Platform', source: 'BIRDBASE', nest: ['Platform'] });
+  assert.deepEqual(nest({ nest: [], nestSite: ['Tree'] }), { label: 'Nest', value: 'In trees', source: 'BIRDBASE', sites: ['Tree'] });
+  assert.equal(nest({ nest: [], nestSite: ['Shrub', 'Tree'] }).value, 'In shrubs or in trees');
+  assert.equal(nest({ nest: [], nestSite: ["Other animal's nest"] }).value, "In other animals' nests");
+  assert.deepEqual(nest({ nest: [], nestSite: [] }), { label: 'Nest', value: 'Not recorded', source: '', missing: true });
+});
+
+test('every nest site in the trait data has a drawing', () => {
+  const nctx = vm.createContext({});
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'docs', 'js', 'nest-icons.js'), 'utf8'), nctx, { filename: 'nest-icons.js' });
+  const ICONS = vm.runInContext('NEST_SITE_ICONS_', nctx);
+  const missing = data('traits.json').values.nestSite.filter(n => !ICONS[n]);
+  assert.deepEqual(missing, []);
+});
+
 test('a fact file leaves out what isn\'t known, and flags what matters for conservation', () => {
   const sp = { sci: 'Strigops habroptilus', common: 'Kakapo', family: 'Strigopidae', order: 'Psittaciformes', iucn: 'CR', code: '', regions: ['Australasia'] };
   const f = call('factFile_', sp, { seen: false, mass: 1600, massSource: 'BIRDBASE', flightless: true, islandOnly: true, restrictedRange: true, nest: [] }, { stickers: STICKERS });
   assert.deepEqual(f.size.map(x => [x.label, x.value, x.source]), [['Weight', '1.6 kg', 'BIRDBASE']]);   // nothing else known
-  assert.deepEqual(f.life, []);
+  assert.deepEqual(f.life.map(x => [x.label, x.value]), [['Nest', 'Not recorded']]);   // the Nest row is never left out
   assert.equal(f.records, null);
   assert.equal(f.threatened, true);
   assert.deepEqual(f.tags, ['Breeds only on islands', 'Restricted range (under 50,000 km²)', 'Flightless']);

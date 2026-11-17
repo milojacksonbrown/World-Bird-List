@@ -533,7 +533,7 @@ function queryFromLyrebird_(reply) {
 
 // ---------- Traits: size, range, habitat, diet… (docs/data/traits.json, from tools/build-traits.js) ----------
 const TRAIT_FIELDS_ = ['mass', 'massSource', 'wing', 'tail', 'beak', 'rangeSize', 'lifestyle', 'migration',
-  'habitat', 'diet', 'elevationMin', 'elevationMax', 'islandOnly', 'restrictedRange', 'flightless', 'clutchMax', 'nest'];
+  'habitat', 'diet', 'elevationMin', 'elevationMax', 'islandOnly', 'restrictedRange', 'flightless', 'clutchMax', 'nest', 'nestSite'];
 const TRAIT_YESNO_ = ['islandOnly', 'restrictedRange', 'flightless'];
 
 /**
@@ -562,7 +562,7 @@ function unpackTraits_(data) {
 /** One species' trait fields for "Ask your list", with null (unknown) where there's no value. */
 function traitFields_(t) {
   const o = {};
-  TRAIT_FIELDS_.forEach(f => { o[f] = t && t[f] !== undefined ? t[f] : (f === 'nest' ? [] : null); });
+  TRAIT_FIELDS_.forEach(f => { o[f] = t && t[f] !== undefined ? t[f] : (f === 'nest' || f === 'nestSite' ? [] : null); });
   return o;
 }
 
@@ -645,7 +645,10 @@ function factFile_(sp, row, extra) {
       fact('Usual altitude', elevation, 'BIRDBASE'),
       fact('Range size', range, 'AVONET'),
       fact('Clutch', has(r.clutchMax) ? 'up to ' + n(r.clutchMax) + ' egg' + (r.clutchMax === 1 ? '' : 's') : null, 'BIRDBASE'),
-      fact('Nest', has(r.nest) ? r.nest.join(' or ') : null, 'BIRDBASE'),
+      // Nest: the type; or, where BIRDBASE doesn't record the type, where the nest is; or "Not recorded"
+      has(r.nest) ? { label: 'Nest', value: r.nest.join(' or '), source: 'BIRDBASE', nest: r.nest }
+        : has(r.nestSite) ? { label: 'Nest', value: r.nestSite.map((st, i) => nestSiteWords_(st, i > 0)).join(' or '), source: 'BIRDBASE', sites: r.nestSite }
+          : { label: 'Nest', value: 'Not recorded', source: '', missing: true },
     ]),
     seen: !!r.seen,
     records: r.seen ? {
@@ -980,4 +983,12 @@ const NECK_ = { heron: 1.75, crane: 1.6, flamingo: 2.1, cormorant: 1.5, diver: 1
 function estimateLength_(t, shape) {
   if (!t || !(t.mass > 0)) return null;
   return Math.round((t.beak || 0) + (t.tail || 0) + LENGTH_K_ * (NECK_[shape] || 1) * Math.cbrt(t.mass));
+}
+
+/** A nest site as words for the fact file: "Tree" -> "In trees" (or "in trees" after the first). */
+function nestSiteWords_(site, later) {
+  const w = { Tree: 'In trees', Ground: 'On the ground', Shrub: 'In shrubs', Rock: 'On rock', Grass: 'In grass',
+    Building: 'On buildings', Stump: 'In stumps', 'Other animal\'s nest': 'In other animals\' nests', Bamboo: 'In bamboo',
+    Pole: 'On poles', Water: 'On water', Cactus: 'In cacti' }[site] || site;
+  return later ? w.charAt(0).toLowerCase() + w.slice(1) : w;
 }

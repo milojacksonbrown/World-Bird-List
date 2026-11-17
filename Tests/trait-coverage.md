@@ -41,6 +41,7 @@ Values are as published. Some look surprising, e.g. BIRDBASE gives European Robi
 | flightless | BIRDBASE | 10,944 (99.3%) |
 | clutchMax | BIRDBASE | 8,347 (75.7%) |
 | nest | BIRDBASE | 7,775 (70.5%) |
+| nestSite | BIRDBASE | 7,961 (72.2%) |
 
 Mass: 10,713 from AVONET, 201 from BIRDBASE where AVONET had none.
 

@@ -534,3 +534,4 @@ html { scroll-behavior: smooth; }
 .ff-block .or { color: var(--ink-soft); font-size: 0.85rem; }
 .ask-table .with-nest { display: flex; }   /* one nest type per line in answers, lined up */
 .ask-table .with-nest + .with-nest { margin-top: 4px; }
+.ff-block .not-recorded { color: var(--ink-soft); font-style: italic; }

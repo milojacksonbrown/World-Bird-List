@@ -42,6 +42,9 @@ const number = (v, dp = 1) => {
 };
 const NEST = { BU: 'Burrow', CP: 'Cup', CR: 'Crevice', CV: 'Tree cavity', DM: 'Dome', HC: 'Half cup', NO: 'No nest',
   O: 'Other bird\'s nest', PL: 'Platform', PN: 'Pendant', SA: 'Saucer', SC: 'Scrape', SP: 'Sphere', M: 'Mound' };
+// Where the nest is (BIRDBASE "Nest_SBS"), used when the nest type isn't recorded
+const NEST_SITE = { T: 'Tree', G: 'Ground', S: 'Shrub', R: 'Rock', Z: 'Grass', B: 'Building', C: 'Stump',
+  N: 'Other animal\'s nest', A: 'Bamboo', P: 'Pole', W: 'Water', K: 'Cactus' };
 const LIFESTYLE = { Insessorial: 'Perching', Terrestrial: 'Ground', Generalist: 'Generalist', Aerial: 'Aerial', Aquatic: 'Aquatic' };
 const MIGRATION = { 1: 'Sedentary', 2: 'Partial migrant', 3: 'Migratory' };
 
@@ -54,7 +57,7 @@ function table(file, sheet, headerRow = 0) {
 
 // ---------- the fields written for each species, in order ----------
 const FIELDS = ['mass', 'massSource', 'wing', 'tail', 'beak', 'rangeSize', 'lifestyle', 'migration',
-  'habitat', 'diet', 'elevationMin', 'elevationMax', 'islandOnly', 'restrictedRange', 'flightless', 'clutchMax', 'nest'];
+  'habitat', 'diet', 'elevationMin', 'elevationMax', 'islandOnly', 'restrictedRange', 'flightless', 'clutchMax', 'nest', 'nestSite'];
 
 function build() {
   for (const f of [AVONET_FILE, BIRDBASE_FILE]) {
@@ -158,6 +161,8 @@ function build() {
       v.clutchMax = number(b.Clutch_Max);
       const nests = String(b.Nest_Type || '').split(',').map(c => NEST[c.trim()]).filter(Boolean);
       v.nest = nests.length ? nests : null;
+      const sites = String(b.Nest_SBS || '').split(/[,\s]+/).map(c => NEST_SITE[c.trim()]).filter(Boolean);
+      v.nestSite = sites.length ? [...new Set(sites)] : null;
     }
     const row = FIELDS.map(f => (v[f] === undefined ? null : v[f]));
     row.forEach((x, i) => { if (x !== null) filled[FIELDS[i]]++; });
