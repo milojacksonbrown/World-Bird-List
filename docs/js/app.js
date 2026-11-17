@@ -58,7 +58,7 @@
   }
 
   function show(text, label, keepPlace) {
-    if (!keepPlace) { $('#lifer-search').value = ''; lifersExpanded = false; lastAsk = null; zoomed = null; }   // a new file starts fresh
+    if (!keepPlace) { $('#lifer-search').value = ''; lifersShown = LIFERS_FIRST; lastAsk = null; zoomed = null; }   // a new file starts fresh
     try {
       const d = buildDashboard_(parseCsvText_(text), checklist, getFixes());
       current = { text, label, d };
@@ -97,8 +97,8 @@
   }
 
   // ---------- Latest lifers: the newest few, Show all / Show fewer, and a search ----------
-  const LIFERS_SHOWN = 10;
-  let lifersExpanded = false;
+  const LIFERS_FIRST = 10, LIFERS_STEPS = [50, 100];   // shown at first; then these, or all
+  let lifersShown = LIFERS_FIRST;
 
   /**
    * A bird's icon: its sticker (a small copy kept with the site), or, if it has none or the
@@ -146,24 +146,34 @@
     const all = current ? current.d.lifers : [];
     const q = $('#lifer-search').value.trim();
     const matches = filterLifers_(all, q);
-    const shown = q || lifersExpanded ? matches : matches.slice(0, LIFERS_SHOWN);   // a search shows every match
+    const shown = q ? matches : matches.slice(0, lifersShown);   // a search shows every match
     $('#lifers').innerHTML = shown.map(liferItem).join('') ||
       '<li class="none">' + (q ? 'No lifers match “' + esc(q) + '”.' : 'No countable species found in this file.') + '</li>';
     $('#lifer-count').textContent = q
       ? num(matches.length) + ' lifer' + (matches.length === 1 ? '' : 's') + ' match “' + q + '”'
       : 'Showing ' + num(shown.length) + ' of ' + num(all.length) + ' lifers';
-    const toggle = $('#lifers-toggle');
-    toggle.hidden = !!q || all.length <= LIFERS_SHOWN;
-    toggle.textContent = lifersExpanded ? 'Show fewer' : 'Show all ' + num(all.length) + ' lifers';
-    toggle.setAttribute('aria-expanded', String(lifersExpanded));
+    // Below the list: longer lists to choose from, and Show fewer once it's longer than the first 10.
+    // Show fewer is also at the top, so a long list can be closed without scrolling to its end.
+    const longer = !q && shown.length > LIFERS_FIRST;
+    const options = q ? [] : LIFERS_STEPS.filter(n => n > shown.length && n < all.length)
+      .map(n => '<button type="button" class="button small" data-show="' + n + '" aria-controls="lifers">Show latest ' + n + '</button>')
+      .concat(shown.length < all.length ? ['<button type="button" class="button small" data-show="all" aria-controls="lifers">Show all ' + num(all.length) + '</button>'] : []);
+    $('#lifers-more').innerHTML = options.join('') +
+      (longer ? '<button type="button" class="button small lifers-fewer" data-show="fewer" aria-controls="lifers">Show fewer</button>' : '');
+    $('.lifer-tools .lifers-fewer').hidden = !longer;
   }
 
   $('#lifer-search').addEventListener('input', renderLifers);
-  $('#lifers-toggle').addEventListener('click', () => {
-    lifersExpanded = !lifersExpanded;
+  // One handler for every Show button, at the top and the bottom of the list
+  $('#lifers-title').closest('section').addEventListener('click', e => {
+    const b = e.target.closest('[data-show]');
+    if (!b || !current) return;
+    const v = b.dataset.show, total = current.d.lifers.length;
+    lifersShown = v === 'fewer' ? LIFERS_FIRST : v === 'all' ? total : Number(v);
     renderLifers();
+    redrawTrail();                                           // the page changed height
     // after collapsing a long list, bring the section back into view
-    if (!lifersExpanded) $('#lifers-title').scrollIntoView({ block: 'nearest' });
+    if (v === 'fewer') $('#lifers-title').scrollIntoView({ block: 'nearest' });
   });
 
   // ---------- Fact files: click a bird for everything known about it ----------
@@ -984,7 +994,138 @@
 
   // Redraw whenever the layout can change: first load, fonts arriving, new data, resizing
   let trailFrame = 0;
-  const redrawTrail = () => { cancelAnimationFrame(trailFrame); trailFrame = requestAnimationFrame(drawTrail); };
+  const redrawTrail = () => { cancelAnimationFrame(trailFrame); trailFrame = requestAnimationFrame(() => { drawTrail(); drawScatter(); }); };
+
+  // ---------- Decoration: your latest lifers' stickers, scattered in the margins ----------
+  // Like stickers in a field notebook: the newest lifers, tilted, in the empty space either side
+  // of the page. Only where there is room (wide screens), never over the content. A seeded random
+  // number generator keeps each bird in the same place every time the page is redrawn.
+  // Where the stickers go. The places are fixed (the birds in them are random each load):
+  // 16 down the page, plus set places around the title card and the footer. Each place is the
+  // centre of a sticker: x from the page's centre (c) or across a margin (left/right, 0 = by the
+  // page, 1 = the window edge); y in pixels below the top of the title card (or the footer).
+  // "in" and "out" keep a sticker inside or outside the dotted route.
+  const SCATTER_BODY = 16;
+  const HEAD_PLACES = [
+    { c: -265, y: 80, where: 'in' },          // beside the heading, left
+    { c: -305, y: 280, where: 'in' },         // by the buttons, left
+    { left: 0.45, y: 255, where: 'out' },     // left margin
+    { left: 0.35, y: 455, where: 'any' },     // left margin, lower
+    { c: 315, y: 80, where: 'in' },           // beside the heading, right
+    { c: 290, y: 300, where: 'in' },          // by the buttons, right, inside the route
+    { right: 0.55, y: 350, where: 'out' },    // right margin, outside the route
+  ];
+  const FOOT_PLACES = [{ left: 0.5, y: 40, where: 'any' }, { right: 0.5, y: 95, where: 'any' }];
+  const SCATTER_ALL = SCATTER_BODY + HEAD_PLACES.length + FOOT_PLACES.length;
+  // Once a sticker has popped in, drop the animation so hovering can straighten it
+  $('#lifer-scatter').addEventListener('animationend', e => e.target.classList.remove('pop'));
+  let scatterKey = '';
+  // A fresh random choice of birds each time a file is shown (their places stay the same);
+  // kept while it's on screen, so resizing the window doesn't reshuffle them.
+  let scatterPick = null;                // { text, birds }
+  function seeded(text) {
+    let h = 2166136261;
+    for (const ch of text) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    return () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
+  }
+  function drawScatter() {
+    const box = $('#lifer-scatter');
+    if (!current || !stickers || $('#dashboard').hidden) { box.innerHTML = ''; scatterKey = ''; return; }
+    if (!scatterPick || scatterPick.text !== current.text) {         // a new file (not just a name fix): pick again
+      const pool = current.d.lifers.filter(l => stickerFor_(checklist.species[l.i], stickers));
+      for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }   // shuffle
+      scatterPick = { text: current.text, birds: pool.slice(0, SCATTER_ALL) };
+      scatterKey = '';                                           // new birds: let them pop in
+    }
+    const birds = scatterPick.birds;
+    const main = $('main').getBoundingClientRect(), top = $('.masthead').getBoundingClientRect().top + scrollY;
+    const headBottom = $('#dashboard').getBoundingClientRect().top + scrollY;
+    const footTop = $('.colophon').getBoundingClientRect().top + scrollY;
+    const pageBottom = document.documentElement.scrollHeight;
+    const left = main.left + 16, right = main.right - 16, width = document.documentElement.clientWidth;
+    const gutter = Math.min(left, width - right) - 20;          // room either side of the page
+    const key = birds.map(b => b.sci).join() + '|' + Math.round(width) + '|' + Math.round(footTop);
+    if (key === scatterKey) return;                              // nothing has moved
+    const fresh = !scatterKey;                                   // first time: let them pop in
+    scatterKey = key;
+    if (gutter < 70 || !birds.length) { box.innerHTML = ''; return; }
+    const size = Math.min(124, gutter * 0.9);                  // never wider than the margin
+
+    // What a sticker mustn't cover: the words (not their full-width blocks), buttons, the route's icons
+    const pageBox = r => ({ l: r.left, r: r.right, t: r.top + scrollY, b: r.bottom + scrollY });
+    const textBox = el => { const rg = document.createRange(); rg.selectNodeContents(el); return pageBox(rg.getBoundingClientRect()); };
+    const blocked = [];
+    [...document.querySelectorAll('.masthead > *, .colophon > *')].filter(el => el.offsetParent && !el.hidden).forEach(el => {
+      if (el.id === 'controls') [...el.children].forEach(c => blocked.push(pageBox(c.getBoundingClientRect())));
+      else if (el.tagName === 'DETAILS') blocked.push(textBox(el.querySelector('summary')));
+      else if (el.textContent.trim()) blocked.push(textBox(el));
+    });
+    document.querySelectorAll('#trail > g').forEach(g => blocked.push(pageBox(g.getBoundingClientRect())));
+    const clear = (x, y, s, gap) => blocked.every(o => x + s + gap < o.l || x - gap > o.r || y + s + gap < o.t || y - gap > o.b);
+
+    // The dotted route, as points on the page, to tell "inside the loop" from "outside it"
+    const route = $('#trail .route'), routePts = [];
+    if (route && route.getTotalLength) {
+      const m = route.getScreenCTM(), len = route.getTotalLength();
+      for (let d = 0; d <= len; d += 8) {
+        const p = route.getPointAtLength(d).matrixTransform(m);
+        routePts.push([p.x, p.y + scrollY]);
+      }
+    }
+    const insideRoute = (cx, cy) => {
+      const xs = routePts.filter(p => Math.abs(p[1] - cy) < 10).map(p => p[0]);
+      return xs.some(x => x < cx) && xs.some(x => x > cx);     // the route on both sides of it
+    };
+
+    // A set place, turned into a spot on this screen. If it would touch text, an icon or another
+    // sticker (or be on the wrong side of the route), the nearest clear spot is used instead,
+    // searching outwards in rings. Always the same answer for the same layout.
+    const placeSpot = (pl, s, y0) => {
+      const cx = pl.c !== undefined ? width / 2 + pl.c
+        : pl.left !== undefined ? left - 12 - (left - 24) * pl.left
+          : right + 12 + (width - right - 24) * pl.right;
+      const cy = y0 + pl.y;
+      const ok = (x, y) => x >= 6 && x + s <= width - 6 && clear(x, y, s, 14) &&
+        (pl.where === 'any' || insideRoute(x + s / 2, y + s / 2) === (pl.where === 'in'));
+      for (let r = 0; r <= 180; r += 12) {
+        const tries = r ? Math.max(8, Math.round(r / 4)) : 1;
+        for (let a = 0; a < tries; a++) {
+          const x = cx - s / 2 + r * Math.cos(2 * Math.PI * a / tries), y = cy - s / 2 + r * Math.sin(2 * Math.PI * a / tries);
+          if (ok(x, y)) { blocked.push({ l: x, r: x + s, t: y, b: y + s }); return [x, y]; }
+        }
+      }
+      return null;                                                 // no room: leave this one out
+    };
+
+    // Down the page: alternating sides, evenly spaced, with a random place, size and tilt in each slot
+    const nHead = HEAD_PLACES.length, nFoot = FOOT_PLACES.length;
+    const step = (footTop - headBottom - size) / SCATTER_BODY;
+    box.style.height = pageBottom + 'px';
+    box.innerHTML = birds.map((b, i) => {
+      const rnd = seeded('place ' + i);                           // the place's own numbers: the same every load
+      const part = i < nHead ? 'head' : i < nHead + nFoot ? 'foot' : 'body';
+      let x, y, s;
+      if (part === 'body') {
+        const k = i - nHead - nFoot, onLeft = k % 2 === 0;
+        s = Math.round(size * (0.8 + rnd() * 0.2));
+        const room = Math.max(0, gutter - s);
+        x = onLeft ? left - 12 - s - rnd() * room : right + 12 + rnd() * room;
+        y = headBottom + step * (k + 0.2 + rnd() * 0.6);
+      } else {
+        // By the title and the footer they aren't squeezed into a margin, so they keep a steady size
+        s = Math.round(76 + rnd() * 22);
+        const spot = part === 'head' ? placeSpot(HEAD_PLACES[i], s, top) : placeSpot(FOOT_PLACES[i - nHead], s, footTop);
+        if (!spot) return '';
+        [x, y] = spot;
+      }
+      const turn = Math.round((rnd() * 2 - 1) * 14);
+      const st = stickerFor_(checklist.species[b.i], stickers);
+      // A button that opens the bird's fact file. Out of the tab order: the lifer list has the same birds for keyboards.
+      return '<button type="button" class="scatter-sticker bird-link' + (fresh ? ' pop' : '') + '" data-sci="' + esc(b.sci) + '" tabindex="-1"' +
+        ' title="' + esc(b.common) + '" style="left:' + Math.round(x) + 'px;top:' + Math.round(y) + 'px;width:' + s + 'px;height:' + s + 'px;--turn:' + turn + 'deg;animation-delay:' + (i * 60) + 'ms">' +
+        '<img src="' + esc(st.thumb) + '" alt="" width="' + s + '" height="' + s + '"></button>';
+    }).join('');
+  }
   addEventListener('resize', redrawTrail);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(redrawTrail);
   // …and whenever the page's height changes for any other reason (text appearing or

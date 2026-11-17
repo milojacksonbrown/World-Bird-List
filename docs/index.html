@@ -16,6 +16,8 @@
 <body>
   <!-- Decoration: a dashed "expedition route" drawn behind the page by app.js -->
   <svg id="trail" class="trail" aria-hidden="true" focusable="false"></svg>
+  <!-- Decoration: stickers of your latest lifers, scattered in the margins by app.js -->
+  <div id="lifer-scatter" class="lifer-scatter" aria-hidden="true"></div>
 
   <header class="masthead">
     <p class="kicker">A field guide to your birds</p>
@@ -93,9 +95,11 @@
           <input id="lifer-search" type="search" autocomplete="off" placeholder="e.g. plover, Corvus or herons">
         </label>
         <p id="lifer-count" class="lifer-count" aria-live="polite"></p>
+        <button type="button" class="button small lifers-fewer" data-show="fewer" aria-controls="lifers" hidden>Show fewer</button>
       </div>
       <ol id="lifers" class="lifers"></ol>
-      <button id="lifers-toggle" type="button" class="button small" aria-controls="lifers" aria-expanded="false" hidden></button>
+      <!-- Show 50 / 100 / all, and Show fewer once the list is longer (app.js) -->
+      <div id="lifers-more" class="lifers-more"></div>
     </section>
 
     <section id="ask-plate" class="plate" aria-labelledby="ask-title">
