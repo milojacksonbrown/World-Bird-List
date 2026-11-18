@@ -479,18 +479,42 @@
     if (!current) return;
     const by = quizSetting('quiz-by');
     const pool = quizPool_(current.d.lifers, checklist, stickers);
+    // "Quiz me on…": the request goes through Lyrebird as an Ask your list question, and the
+    // checked query picks which of your lifers to ask about (the wrong answers still come from all of them)
+    const about = $('#quiz-about').value.trim();
+    let scope = null, scopeText = '';
+    if (about) {
+      const btn = $('#quiz-start');
+      btn.disabled = true;
+      $('#quiz-best').textContent = 'Working out which birds you mean…';
+      try {
+        const ans = queryFromLyrebird_(await askLyrebird({ action: 'query', question: ('Which species have I seen that match: ' + about).slice(0, ASK.MAX_QUESTION) }));
+        if (ans.status !== 'query') throw new Error(ans.reason || 'that couldn\'t be turned into a group of birds');
+        const s = quizScopeQuery_(ans.query);
+        if (s.problem) throw new Error(s.problem);
+        const res = runQuery_(s.query, await askTables());
+        const sciCol = res.columns.findIndex(c => c.field === 'scientific');
+        scope = new Set(res.rows.map(r => r[sciCol]));
+        scopeText = describeQuery_(s.query).split(', ')[0];     // just which birds (not the sort order or limit)
+      } catch (e) {
+        $('#quiz-best').textContent = 'Sorry: ' + e.message;
+        return;
+      } finally { btn.disabled = false; }
+    }
     // By ear: only birds with a recording are asked about (any of your lifers can still be a wrong answer)
     const sounds = by === 'sound' ? await loadSounds() : {};
-    const askable = by === 'sound' ? pool.filter(sp => (sounds[sp.sci] || []).length) : pool;
+    const askable = pool.filter(sp => (!scope || scope.has(sp.sci)) && (by !== 'sound' || (sounds[sp.sci] || []).length));
     if (askable.length < 4) {
-      $('#quiz-best').textContent = by === 'sound' ? 'The sound quiz needs at least four lifers with recordings.' : 'The quiz needs at least four lifers with pictures.';
+      $('#quiz-best').textContent = scope
+        ? 'Only ' + askable.length + ' of your lifers match "' + about + '"' + (by === 'sound' ? ' and have a recording' : '') + ': a quiz needs at least four.'
+        : by === 'sound' ? 'The sound quiz needs at least four lifers with recordings.' : 'The quiz needs at least four lifers with pictures.';
       return;
     }
     const birds = shuffled_(askable, Math.random).slice(0, QUIZ_LENGTH);
     quiz = { mode: quizSetting('quiz-mode'), level: quizSetting('quiz-level'), by, pool, birds,
       // one recording per bird, chosen at random from its song and call
       recordings: by === 'sound' ? birds.map(sp => { const rs = sounds[sp.sci]; return rs[Math.floor(Math.random() * rs.length)]; }) : null,
-      i: 0, score: 0, missed: [] };
+      i: 0, score: 0, missed: [], scopeText, scopeSize: askable.length };
     $('#quiz-setup').hidden = true;
     $('#quiz-game').hidden = false;
     quizQuestion();
@@ -506,6 +530,7 @@
     const rec = quiz.by === 'sound' ? soundInfo_(quiz.recordings[quiz.i]) : null;
     $('#quiz-game').innerHTML =
       '<div class="quiz-top"><span>Bird ' + (quiz.i + 1) + ' of ' + quiz.birds.length + '</span><span>Score: ' + quiz.score + '</span></div>' +
+      (quiz.scopeText ? '<p class="quiz-scope">Quizzing you on: ' + esc(quiz.scopeText) + ' (' + num(quiz.scopeSize) + ' birds)</p>' : '') +
       (rec
         // By ear: the recording, and its credit (the XC number links to the species, so it's added after answering)
         ? '<div class="quiz-sound"><div class="quiz-sound-icon" aria-hidden="true">♪</div>' +

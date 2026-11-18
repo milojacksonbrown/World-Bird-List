@@ -380,3 +380,15 @@ test('trait questions are described in plain English', () => {
   ctx.Q = check({ table: 'species', filters: [{ field: 'seen', op: 'eq', value: 'true' }, { field: 'habitat', op: 'eq', value: 'Forest' }], sortField: 'rangeSize', sortDir: 'asc' }).query;
   assert.match(run('describeQuery_(Q)'), /main habitat is “Forest”/i);
 });
+
+test('"Quiz me on…": the query is made about species you\'ve seen, as many as allowed', () => {
+  ctx.Q = check({ table: 'species', filters: [{ field: 'countries', op: 'has', value: 'Spain' }, { field: 'seen', op: 'eq', value: 'false' }] }).query;
+  const s = plain(run('quizScopeQuery_(Q)'));
+  assert.equal(s.problem, '');
+  assert.deepEqual(s.query.filters, [{ field: 'countries', op: 'has', value: 'Spain' }, { field: 'seen', op: 'eq', value: true }]);  // "not seen" can't be quizzed
+  assert.equal(run('quizScopeQuery_(Q).query.limit'), Infinity);                                     // every match, not just 200
+  ctx.Q = run('quizScopeQuery_(Q).query');                // not through JSON, which would turn Infinity into null
+  assert.deepEqual(col(plain(run('runQuery_(Q, ASKDATA)')), 'common').sort(), ['European Turtle Dove', 'Grey Heron', 'Osprey']);
+  ctx.Q = check({ table: 'years' }).query;
+  assert.match(plain(run('quizScopeQuery_(Q)')).problem, /isn't a group of birds/);
+});

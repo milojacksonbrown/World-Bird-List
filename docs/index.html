@@ -171,13 +171,18 @@
           <label><input type="radio" name="quiz-level" value="easy" checked> Easy: the other names are any of your lifers</label>
           <label><input type="radio" name="quiz-level" value="hard"> Hard: the other names are lookalikes from the same family</label>
         </fieldset>
+        <div class="quiz-about">
+          <label for="quiz-about">Quiz me on <span class="quiz-optional">(optional: leave empty for all your lifers)</span></label>
+          <input id="quiz-about" type="text" maxlength="200" autocomplete="off" placeholder="e.g. birds I saw in Thailand, my 2025 lifers, owls, threatened birds">
+        </div>
         <button id="quiz-start" type="button" class="button primary">Start a round</button>
         <p id="quiz-best" class="ai-note"></p>
       </div>
       <div id="quiz-game" class="quiz-game" hidden></div>
       <p class="ai-note quiz-small">The pictures are AI illustrations (huashu-bird-sticker) and a few may not look exactly like the bird.
         Typed answers can use any of the bird's names, with or without capitals, and small spelling slips are forgiven.
-        Recordings are from <a href="https://xeno-canto.org">xeno-canto</a>, each credited to its recordist.</p>
+        Recordings are from <a href="https://xeno-canto.org">xeno-canto</a>, each credited to its recordist.
+        A "Quiz me on" request (and nothing else) goes through Lyrebird to an AI model, as in Ask your list, which turns it into a checked search of your lifers.</p>
     </section>
 
     <section id="unmatched-plate" class="plate" aria-labelledby="unmatched-title">

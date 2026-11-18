@@ -31,6 +31,7 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 - **Where in the world:** a map of countries birded, shaded by the % of the species recorded there (eBird) that you've seen, and bars showing how much of each region's birds you've seen. Click a country to zoom into its states and provinces (counties in the UK, France, Ireland and Indonesia), shaded the same way, with species, lifers and the % of the species eBird has recorded there.
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
 - **Latest lifers:** the first time each species was seen, newest first (the latest 10, then 50, 100 or all, with Show fewer at the top and bottom), with a search box and an illustrated sticker of each bird. Where a species has no sticker, a field-guide silhouette of its body shape (heron, wader, owl, finch…) stands in: all 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
+- **Quiz me on…:** type what you'd like to be quizzed on (*birds I saw in Thailand*, *my 2025 lifers*, *owls*) and the quiz uses just those birds, with every other setting (picture or sound, easy or hard) as usual. It reuses Ask your list: the AI turns the request into a search, the checker verifies it, and the page keeps it to species you've seen, refusing anything that isn't a group of birds.
 - **Bird sounds:** fact files play each bird's song and call, from xeno-canto, credited to their recordists. 10,041 of 11,025 living species (91%) have a recording.
 - **Test yourself:** a quiz on your own lifers, by picture or **by ear** (a song or call plays and you name the bird). For pictures, a sticker appears and you name the bird, choosing from four names or typing it. In *hard* mode the wrong answers are lookalikes from the same family (woodswallows against butcherbirds); typed answers accept any of the bird's names, American spellings, the scientific name, the name without its first word ("Bullfinch") when no other bird has that name, and small spelling slips (one letter in eight). Ten birds a round, with the ones you missed to look at again and your best score kept in your browser.
 - **Your birds around the page:** once your file loads, 25 of your lifers, picked at random each time, appear as stickers around the title, down the margins and by the footer, in fixed places chosen never to cover the text. Click one for its fact file.
@@ -133,7 +134,7 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
 
 ## Testing
 
-- **145 automated tests** (`node --test`) cover:
+- **146 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers

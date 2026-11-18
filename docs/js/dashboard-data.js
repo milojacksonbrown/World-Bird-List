@@ -1012,3 +1012,16 @@ function soundInfo_(r) {
     page: 'https://xeno-canto.org/' + encodeURIComponent(r.id), licenceUrl: String(r.lic || ''),
   };
 }
+
+/**
+ * A "Quiz me on…" request, answered as an Ask your list query, made into the quiz's list of birds:
+ * it must be about species, it's limited to ones you've seen (added if the AI left it out), and it
+ * takes every match (the 200-row cap is for answer tables; this list stays in the browser).
+ * Returns {problem} if it can't be used.
+ * @param {Object} q  a checked query (checkQuery_ / queryFromLyrebird_)
+ */
+function quizScopeQuery_(q) {
+  if (!q || q.table !== 'species') return { problem: 'That isn\'t a group of birds. Try something like "birds I saw in Thailand" or "owls".' };
+  const filters = q.filters.filter(f => f.field !== 'seen').concat([{ field: 'seen', op: 'eq', value: true }]);
+  return { problem: '', query: Object.assign({}, q, { filters, limit: Infinity, columns: [] }) };
+}
