@@ -153,6 +153,15 @@ test('seasonCells_: June–July, December–January or both, and strays left out
   assert.deepEqual(rare.map(c => [c.hash, c.season]).sort(), [['gcp', 'december'], ['u10', 'both']]);   // a rare bird keeps them all
 });
 
+test('seasonCells_: a few winter records in a busy summer cell don\'t make it year-round', () => {
+  const f = (geohash, total) => ({ props: { geohash }, total });
+  // Like the Hobby in southern England: 3,000 summer records, 8 in winter (stragglers, mistakes, wrong dates)
+  const hobby = call('seasonCells_', [f('gcp', 3000), f('u10', 400)], [f('gcp', 8), f('u10', 60)]);
+  assert.deepEqual(hobby.map(c => [c.hash, c.season]).sort(), [['gcp', 'june'], ['u10', 'both']]);   // 60 of 400 is enough
+  // And the other way round: a winter visitor with a few summer records
+  assert.deepEqual(call('seasonCells_', [f('ezs', 5)], [f('ezs', 900)]).map(c => c.season), ['december']);
+});
+
 test('rangeMapSvg_: the cells by season, your sightings, and a frame around the range', () => {
   const box = (lat, lon) => ({ lat: [lat, lat + 1.4], lon: [lon, lon + 1.4] });
   const cells = [{ hash: 'a', box: box(51, -1), season: 'both', total: 9 }, { hash: 'b', box: box(64, -20), season: 'june', total: 9 }];

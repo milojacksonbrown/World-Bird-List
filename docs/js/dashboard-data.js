@@ -769,10 +769,15 @@ function geohashBox_(hash) {
  * June is summer in the north and winter in the south.) For birds with many
  * records, cells with only one or two are left out, so a few vagrants don't
  * look like part of the range.
+ * A season also has to hold its own against the other in the same cell: at least
+ * a tenth as many records (SEASON_SHARE_). A busy cell with 3,000 summer records and
+ * 8 winter ones (late stragglers, mistaken identities, wrong dates) is a summer
+ * cell, not a year-round one.
  * @param {Array} june  features from readMvtPoints_ for June–July (props.geohash, total)
  * @param {Array} december  the same for December–January
  * @return {Array<{hash, box, season: 'june'|'december'|'both', total}>}
  */
+const SEASON_SHARE_ = 0.1;
 function seasonCells_(june, december) {
   const add = (map, list, season) => (list || []).forEach(p => {
     const h = p.props && p.props.geohash;
@@ -788,7 +793,8 @@ function seasonCells_(june, december) {
   const records = all.reduce((n, c) => n + c.june + c.december, 0);
   const min = records > 5000 ? Math.max(3, Math.round(records * 1e-5)) : 1;   // one record in 100,000, for common birds
   return all.map(c => {
-    const j = c.june >= min, d = c.december >= min;
+    const j = c.june >= min && c.june >= c.december * SEASON_SHARE_;
+    const d = c.december >= min && c.december >= c.june * SEASON_SHARE_;
     if (!j && !d) return null;
     const box = geohashBox_(c.hash);
     return box && { hash: c.hash, box, season: j && d ? 'both' : j ? 'june' : 'december', total: c.june + c.december };

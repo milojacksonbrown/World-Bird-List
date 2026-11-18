@@ -256,7 +256,11 @@
   // GBIF (gbif.org) gathers bird records from eBird, museums and other surveys. Its map service
   // sends the records for a species and months as a grid of cells (vector tiles); zoom 1 is four
   // tiles, cells of about 150 km. Two seasons, so eight small requests, made only when a fact file opens.
+  // Only eBird's records are asked for: eBird's reviewers check unusual sightings (a Hobby in
+  // December, say), so far fewer mistakes and wrong dates get through than in GBIF's other sources.
+  // A species with no eBird records on GBIF falls back to every source.
   const GBIF = 'https://api.gbif.org/';
+  const EBIRD_ON_GBIF = '4fa7b334-ce0d-4e88-aaae-2e0c138d049e';     // "EOD – eBird Observation Dataset"
   const gbifKeys = new Map(), rangeCache = new Map();
   async function gbifKey(sci) {
     if (!gbifKeys.has(sci)) {
@@ -266,9 +270,10 @@
     }
     return gbifKeys.get(sci);
   }
-  async function seasonTiles(key, months) {
+  async function seasonTiles(key, months, dataset) {
     const tiles = await Promise.all([[0, 0], [0, 1], [1, 0], [1, 1]].map(async ([x, y]) => {
       const res = await fetch(GBIF + 'v2/map/occurrence/adhoc/1/' + x + '/' + y + '.mvt?taxonKey=' + key + '&' + months +
+        (dataset ? '&datasetKey=' + dataset : '') +
         '&basisOfRecord=HUMAN_OBSERVATION&occurrenceStatus=PRESENT&hasGeospatialIssue=false&mode=GEO_CENTROID&srs=EPSG:3857');
       if (!res.ok) throw new Error('GBIF ' + res.status);
       const buf = new Uint8Array(await res.arrayBuffer());
@@ -280,8 +285,10 @@
     if (!rangeCache.has(sci)) {
       const p = gbifKey(sci).then(async key => {
         if (!key) return { cells: [], key: null };
-        const [june, december] = await Promise.all([seasonTiles(key, 'month=6,7'), seasonTiles(key, 'month=12&month=1')]);
-        return { cells: seasonCells_(june, december), key };
+        const seasons = dataset => Promise.all([seasonTiles(key, 'month=6,7', dataset), seasonTiles(key, 'month=12&month=1', dataset)]);
+        let [june, december] = await seasons(EBIRD_ON_GBIF), ebird = true;
+        if (!june.length && !december.length) { [june, december] = await seasons(null); ebird = false; }
+        return { cells: seasonCells_(june, december), key, ebird };
       });
       p.catch(() => rangeCache.delete(sci));              // try again next time
       rangeCache.set(sci, p);
@@ -300,7 +307,8 @@
       if ($('#ff-map') !== box) return;                      // another bird was opened meanwhile
       if (!range.cells.length && !sightings.length) { box.innerHTML = '<p class="ai-note">No mapped records for this species on GBIF.</p>'; return; }
       box.innerHTML = rangeMapSvg_(range.cells, world, sightings);
-      if (range.key) $('#ff-map-credit').innerHTML = 'Records: <a href="https://www.gbif.org/species/' + range.key + '">GBIF.org</a>, including eBird. ' +
+      if (range.key) $('#ff-map-credit').innerHTML = (range.ebird ? 'eBird records' : 'Records (none from eBird, so from all sources)') +
+        ', via <a href="https://www.gbif.org/species/' + range.key + '">GBIF.org</a>. ' +
         'June–July is summer in the north and winter in the south.';
     } catch (e) {
       if ($('#ff-map') === box) box.innerHTML = '<p class="ai-note">The map couldn\'t be loaded just now (' + esc(e.message) + ').</p>';
@@ -425,7 +433,7 @@
       (f.range ? '<section class="ff-block ff-range"><h3>Where it lives</h3><p>' + esc(f.range) + ' <span class="src">AviList</span></p></section>' : '') +
       '<section class="ff-block"><h3>Range map</h3><div id="ff-map" class="ff-map"><p class="working">Loading the map…</p></div>' +
         '<ul class="ff-legend"><li><span class="sw june"></span>Recorded in June–July</li><li><span class="sw december"></span>December–January</li>' +
-        '<li><span class="sw both"></span>Both</li>' + (f.seen ? '<li><span class="sw mine"></span>Your sightings</li>' : '') + '</ul>' +
+        '<li><span class="sw both"></span>Year-round</li>' + (f.seen ? '<li><span class="sw mine"></span>Your sightings</li>' : '') + '</ul>' +
         '<p id="ff-map-credit" class="ff-credit"></p></section>' +
       '<div class="ff-grid"><div>' + list('Size', f.size) + sizeComparison(f, row) + '</div>' + list('Life', f.life) + '</div>' +
       ((recordings || []).length ? '<section class="ff-block ff-sounds"><h3>Sounds</h3><div class="sounds">' + recordings.map(soundPlayer).join('') + '</div>' +
