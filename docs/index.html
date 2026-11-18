@@ -78,6 +78,7 @@
       <a href="#lifers-plate">Latest lifers</a>
       <a href="#ask-plate">Ask your list</a>
       <a href="#quiz-plate">Test yourself</a>
+      <a href="#explore-plate">Explore</a>
       <a href="#unmatched-plate">Names to check</a>
       <label class="names-lang" hidden>Bird names in
         <select id="names-lang"><option value="">English only</option></select>
@@ -183,6 +184,20 @@
         Typed answers can use any of the bird's names, with or without capitals, and small spelling slips are forgiven.
         Recordings are from <a href="https://xeno-canto.org">xeno-canto</a>, each credited to its recordist.
         A "Quiz me on" request (and nothing else) goes through Lyrebird to an AI model, as in Ask your list, which turns it into a checked search of your lifers.</p>
+    </section>
+
+    <section id="explore-plate" class="plate" aria-labelledby="explore-title">
+      <h2 id="explore-title">Explore</h2>
+      <p class="caption">Birds reported somewhere in the last 30 days that you haven't seen yet: what you could find there now.</p>
+      <form id="explore-form" class="explore-form">
+        <label>Country <select id="explore-country"></select></label>
+        <label>State or province <select id="explore-state"><option value="">All of it</option></select></label>
+        <label id="explore-county-box" hidden>County <select id="explore-county"><option value="">All of it</option></select></label>
+        <button type="submit" class="button primary">Show new birds</button>
+      </form>
+      <div id="explore-result" class="explore-result" aria-live="polite"></div>
+      <p class="ai-note">Recent sightings: <a href="https://ebird.org">eBird</a> (Cornell Lab of Ornithology), fetched through Lyrebird and
+        remembered for an hour. Place names are left out where eBird marks them private.</p>
     </section>
 
     <section id="unmatched-plate" class="plate" aria-labelledby="unmatched-title">

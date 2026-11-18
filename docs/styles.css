@@ -567,3 +567,18 @@ html { scroll-behavior: smooth; }
 .quiz-optional { font-family: var(--sans); font-weight: 400; font-size: 0.85rem; color: var(--ink-soft); }
 .quiz-about input { padding: 9px 12px; font: 1rem var(--sans); border: 1px solid var(--rule); background: #fff; color: var(--ink); max-width: 34em; }
 .quiz-scope { margin: 6px 0 0; font-size: 0.88rem; color: var(--ink-soft); font-style: italic; }
+
+/* ---------- Explore ---------- */
+.explore-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; margin-bottom: 14px; }
+.explore-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.88rem; color: var(--ink-soft); }
+.explore-form label[hidden] { display: none; }
+.explore-form select { font: 0.95rem var(--sans); padding: 7px 8px; border: 1px solid var(--rule); background: #fff; color: var(--ink); min-width: 12em; max-width: 18em; }
+.explore-summary { margin: 0 0 10px; }
+.explore-family h3 { margin: 14px 0 4px; font-family: var(--serif); font-size: 1.05rem; color: var(--green); border-bottom: 1px solid var(--rule); padding-bottom: 2px; }
+.explore-family h3 .sci { font-style: italic; font-weight: 400; color: var(--ink-soft); font-size: 0.9rem; }
+.explore-family ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(16em, 1fr)); gap: 4px 18px; }
+.explore-family li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.explore-family .icon.sticker img { width: 32px; height: 32px; }
+.explore-bird { display: flex; flex-direction: column; min-width: 0; }
+.explore-when { font-size: 0.8rem; color: var(--ink-soft); }
+.explore-link { font-size: 0.82rem; margin-left: 4px; }

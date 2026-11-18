@@ -17,9 +17,10 @@ const request = extra => JSON.stringify({ action: 'nameFix', ebird: { sci: 'Corv
  * A fresh Lyrebird with fake Google services. geminiReply: [httpCode, body].
  * geminiReplies: several, one per call in order (e.g. Flash fails, then Gemma answers).
  */
-function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part of Carrion Crow here' }], geminiReplies, props = {} } = {}) {
+function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part of Carrion Crow here' }], geminiReplies, props = {}, ebirdReply = [200, []] } = {}) {
   const store = new Map(Object.entries({ GEMINI_API_KEY: KEY, ...props }));
   const calls = [];
+  const cacheStore = new Map();
   const fakes = {
     PropertiesService: { getScriptProperties: () => ({
       getProperty: k => (store.has(k) ? store.get(k) : null),
@@ -28,9 +29,11 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
       getKeys: () => [...store.keys()],
     }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    CacheService: { getScriptCache: () => ({ get: k => (cacheStore.has(k) ? cacheStore.get(k) : null), put: (k, v) => cacheStore.set(k, v) }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: text => ({ setMimeType: () => ({ text }) }) },
     UrlFetchApp: { fetch: (url, opts) => {
       calls.push({ url, opts });
+      if (/api\.ebird\.org/.test(url)) return { getResponseCode: () => ebirdReply[0], getContentText: () => JSON.stringify(ebirdReply[1]) };
       const [code, body] = geminiReplies ? geminiReplies[Math.min(calls.length - 1, geminiReplies.length - 1)] : geminiReply;
       const groq = /api\.groq\.com/.test(url);       // Groq replies in OpenAI's chat format
       const text = typeof body === 'string' ? body : JSON.stringify(code !== 200 ? body
@@ -52,7 +55,7 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
 test('opening the web address shows it is running, without revealing the key', () => {
   const { run } = setup();
   const text = run('doGet')().text;
-  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-12 (session 4f)', actions: ['nameFix', 'query'], usedToday: 0, dailyCap: 200 });
+  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-18 (explore)', actions: ['nameFix', 'query', 'recent'], usedToday: 0, dailyCap: 200 });
   assert.ok(!text.includes(KEY));
 });
 
@@ -305,4 +308,40 @@ test('a Groq model with no GROQ_API_KEY is skipped, and Lyrebird runs on a Groq 
   assert.equal(noGroqKey.calls.length, 1);                        // nothing sent to Groq without a key
   const groqOnly = setup({ props: { GEMINI_API_KEY: '', AI_MODELS: GROQ, GROQ_API_KEY: 'g' } });
   assert.equal(groqOnly.post(request()).status, 'pick');
+});
+
+// ---------- recent: the birds reported in a place lately, for Explore ----------
+const EBIRD_KEY = 'TEST-EBIRD-KEY';
+const OBS = [
+  { speciesCode: 'eurrob1', obsDt: '2026-11-17 08:10', locName: 'Minsmere RSPB', locationPrivate: false },
+  { speciesCode: 'eurrob1', obsDt: '2026-11-16 09:00', locName: 'Somewhere else', locationPrivate: false },   // the same bird again
+  { speciesCode: 'bewswa1', obsDt: '2026-11-15 15:30', locName: '12 Acacia Avenue (my garden)', locationPrivate: true },
+];
+
+test('recent: the species reported in a region lately, one each, private places left out', () => {
+  const { post, calls } = setup({ props: { EBIRD_API_KEY: EBIRD_KEY }, ebirdReply: [200, OBS] });
+  const r = post(JSON.stringify({ action: 'recent', region: 'GB-ENG-SUF' }));
+  assert.deepEqual(r, { ok: true, region: 'GB-ENG-SUF', days: 30, species: [
+    { code: 'eurrob1', date: '2026-11-17', loc: 'Minsmere RSPB' }, { code: 'bewswa1', date: '2026-11-15', loc: '' }] });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /^https:\/\/api\.ebird\.org\/v2\/data\/obs\/GB-ENG-SUF\/recent\?back=30&cat=species$/);
+  assert.equal(calls[0].opts.headers['X-eBirdApiToken'], EBIRD_KEY);          // the key goes in a header
+  assert.ok(!JSON.stringify(r).includes('Acacia'));
+});
+
+test('recent: a place asked about again within the hour comes from memory, not eBird', () => {
+  const { post, calls, store } = setup({ props: { EBIRD_API_KEY: EBIRD_KEY }, ebirdReply: [200, OBS] });
+  post(JSON.stringify({ action: 'recent', region: 'GB' }));
+  post(JSON.stringify({ action: 'recent', region: 'GB' }));
+  assert.equal(calls.length, 1);
+  assert.equal(store.get('EBIRD_' + new Date().toISOString().slice(0, 10)), '1');   // counted once, separately from the AI
+});
+
+test('recent: bad region codes, no eBird key, and eBird errors', () => {
+  const { post } = setup({ props: { EBIRD_API_KEY: EBIRD_KEY } });
+  for (const region of ['', 'gb', 'GB-ENG-SUF-X', 'GB; DROP', 42]) {
+    assert.equal(post(JSON.stringify({ action: 'recent', region })).error, 'bad-request', String(region));
+  }
+  assert.equal(setup().post(JSON.stringify({ action: 'recent', region: 'GB' })).error, 'not-configured');
+  assert.equal(setup({ props: { EBIRD_API_KEY: EBIRD_KEY }, ebirdReply: [403, {}] }).post(JSON.stringify({ action: 'recent', region: 'GB' })).error, 'ebird-unavailable');
 });

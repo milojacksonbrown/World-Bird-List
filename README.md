@@ -31,6 +31,7 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 - **Where in the world:** a map of countries birded, shaded by the % of the species recorded there (eBird) that you've seen, and bars showing how much of each region's birds you've seen. Click a country to zoom into its states and provinces (counties in the UK, France, Ireland and Indonesia), shaded the same way, with species, lifers and the % of the species eBird has recorded there.
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
 - **Latest lifers:** the first time each species was seen, newest first (the latest 10, then 50, 100 or all, with Show fewer at the top and bottom), with a search box and an illustrated sticker of each bird. Where a species has no sticker, a field-guide silhouette of its body shape (heron, wader, owl, finch…) stands in: all 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
+- **Explore:** pick a country, state or county (or click *Explore* beside one on the map) and see the birds reported there in the last 30 days that aren't on your list yet, grouped by family with when and where each was last reported: what you could find there now.
 - **Quiz me on…:** type what you'd like to be quizzed on (*birds I saw in Thailand*, *my 2025 lifers*, *owls*) and the quiz uses just those birds, with every other setting (picture or sound, easy or hard) as usual. It reuses Ask your list: the AI turns the request into a search, the checker verifies it, and the page keeps it to species you've seen, refusing anything that isn't a group of birds.
 - **Bird sounds:** fact files play each bird's song and call, from xeno-canto, credited to their recordists. 10,041 of 11,025 living species (91%) have a recording.
 - **Test yourself:** a quiz on your own lifers, by picture or **by ear** (a song or call plays and you name the bird). For pictures, a sticker appears and you name the bird, choosing from four names or typing it. In *hard* mode the wrong answers are lookalikes from the same family (woodswallows against butcherbirds); typed answers accept any of the bird's names, American spellings, the scientific name, the name without its first word ("Bullfinch") when no other bird has that name, and small spelling slips (one letter in eight). Ten birds a round, with the ones you missed to look at again and your best score kept in your browser.
@@ -90,6 +91,15 @@ A public website can't contain an API key, because anyone could copy it. So the 
 
 If both models are unavailable or the cap is reached, **the rest of the site keeps working**: string matching still suggests fixes, and only the AI parts pause.
 
+## Explore: what you could see there now
+
+eBird's API can say which species have been reported in a place in the last 30 days, for any country, state or county. That's a live answer to "what's around at this time of year", without the all-time vagrants a full species list would include.
+
+- **Through Lyrebird, so the key stays private.** Lyrebird has a third job, `recent`, separate from the AI: it takes an eBird region code (checked against a strict pattern), adds the eBird key from its settings, and passes on only the species code, the last date, and the place name unless eBird marks it private (often someone's garden).
+- **Polite to eBird.** Each place's answer is remembered for an hour (Apps Script's cache), so repeated clicks don't call eBird again, and Explore has its own daily cap, separate from the AI's.
+- **Matched by eBird's own codes.** AviList records the eBird code for every species, so eBird's answer maps straight onto your list; the page then lists the species you haven't seen, by family, in checklist order.
+- **The right codes for places.** The place picker uses eBird's own country, state and county codes, saved during the region-totals run (`tools/build-explore-regions.js`). The map's county shapes come from Natural Earth, with different codes, so the map's *Explore* links match counties to eBird's by name.
+
 ## Bird sounds
 
 Fact files play a bird's song and call, and the quiz can play one for you to name. The recordings are from [xeno-canto](https://xeno-canto.org), the open library where birders share recordings, each under a Creative Commons licence chosen by its recordist.
@@ -134,7 +144,7 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
 
 ## Testing
 
-- **146 automated tests** (`node --test`) cover:
+- **150 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers
@@ -142,6 +152,7 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
   - the query checker, which has to reject unknown tables and fields, the wrong value types, and tampered replies
   - the fact files: every fact labelled with its source, unknown facts left out, made-up checklist IDs not linked, and a thumbnail present for every species with a sticker
   - the range map: reading GBIF's vector tiles (from a tile built by hand in the test), grid cells, the projection, sorting by season, leaving out strays, and framing
+  - Explore: Lyrebird's `recent` job (one entry per species, private places left out, the key in a header, an hour's memory, its own daily cap, bad region codes refused), and turning eBird's answer into the species you haven't seen, by family
   - the quiz: lookalike wrong answers, and which typed answers count (spellings, other names, slips, short names) and which don't
   - a syntax check on the page's own scripts
   - the trait data: unpacking the compact file, filtering and sorting by weight, habitat, diet and nest, and unknown values never matching
@@ -207,6 +218,7 @@ Some things I learned along the way:
 | `AskYourList.gs` | The question tool: allowed tables, prompt, query checker, runner and description (shared) |
 | `Lyrebird/Lyrebird.gs` | The AI middleman web app |
 | `tools/build-traits.js` | Joins AVONET and BIRDBASE to AviList (weight, range, habitat, diet, nests…) and writes the coverage report |
+| `tools/build-explore-regions.js` | Every country, state and county with its eBird code, for Explore's place picker |
 | `tools/fetch-sounds.js` | Fetches two recordings' details (song and call) per species from xeno-canto, resumably; `--rebuild` rewrites the file from the saved answers |
 | `tools/build-names.js` | Builds one file of bird names per language (45) for the language picker |
 | `tools/build-factfiles.js` | Builds the sticker thumbnails, the sticker index and AviList's range text for the fact files |
@@ -239,6 +251,7 @@ Follow the instructions at the top of [`LifeList.gs`](LifeList.gs), or the [setu
 - **Sightings and regional species totals:** [eBird](https://ebird.org) (Cornell Lab of Ornithology). This project isn't affiliated with eBird or AviList.
 - **Map:** country and state/province outlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain), drawn with [Leaflet](https://leafletjs.com/). **Charts:** [Chart.js](https://www.chartjs.org/).
 - **Bird names in other languages:** IOC World Bird List v15.2, multilingual edition (Gill, F., D. Donsker & P. Rasmussen, Eds), CC BY 3.0, via huashu-bird-sticker. One file per language (`tools/build-names.js`), loaded only when chosen.
+- **Recent sightings (Explore):** [eBird](https://ebird.org), Cornell Lab of Ornithology, through its API.
 - **Bird sounds:** [xeno-canto](https://xeno-canto.org), each recording by its recordist under its Creative Commons licence (credited beside each player).
 - **Range maps:** occurrence records from [GBIF.org](https://www.gbif.org), including eBird, fetched when a fact file opens.
 - **Bird illustrations:** [huashu-bird-sticker](https://github.com/alchaincyf/huashu-bird-sticker) v2.3.6 by Huashu (Bird Album), CC BY 4.0. AI-generated; resized for the icons.

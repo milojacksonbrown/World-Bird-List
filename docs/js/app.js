@@ -88,6 +88,8 @@
 
     renderNameFixes(d);
     quizReset();                               // a new file: back to the start screen
+    $('#explore-result').innerHTML = '';
+    setupExplore();                            // Explore starts on the country of your latest lifer
 
     $('#dashboard').hidden = false;     // must be visible before the map and charts measure their size
     renderRegions(d);
@@ -618,6 +620,77 @@
     quizAnswer(res.correct, res.note);
   });
 
+  // ---------- Explore: birds reported in a place lately that aren't on your list ----------
+  // Pick a country, then a state and county if you like; Lyrebird asks eBird which species have
+  // been reported there in the last 30 days, and the page lists the ones you haven't seen.
+  let exploreRegions = null;
+  const exploreLoading = fetch('data/explore-regions.json').then(r => (r.ok ? r.json() : null)).then(d => { exploreRegions = d; return d; }).catch(() => null);
+  const optionsHtml = (list, first) => (first ? '<option value="">' + esc(first) + '</option>' : '') +
+    list.map(([code, name]) => '<option value="' + esc(code) + '">' + esc(name) + '</option>').join('');
+
+  async function setupExplore() {
+    const R = await exploreLoading;
+    if (!R || !current) { $('#explore-plate').hidden = !R; return; }
+    // Start on the country of your most recent lifer
+    const recent = current.d.lifers.find(l => l.place);
+    const st = recent && current.d.stats && current.d.stats.species[recent.i];
+    const lastState = st && [...(st.states || [])].pop();
+    const cc = lastState ? lastState.slice(0, 2) : 'GB';
+    $('#explore-country').innerHTML = optionsHtml(R.countries);
+    $('#explore-country').value = R.countries.some(c => c[0] === cc) ? cc : R.countries[0][0];
+    exploreCountryChanged();
+  }
+  function exploreCountryChanged() {
+    const R = exploreRegions, cc = $('#explore-country').value;
+    $('#explore-state').innerHTML = optionsHtml((R.states[cc] || []), 'All of it');
+    $('#explore-state').disabled = !(R.states[cc] || []).length;
+    exploreStateChanged();
+  }
+  function exploreStateChanged() {
+    const list = exploreRegions.counties[$('#explore-state').value] || [];
+    $('#explore-county').innerHTML = optionsHtml(list, 'All of it');
+    $('#explore-county-box').hidden = !list.length;
+  }
+  $('#explore-country').addEventListener('change', exploreCountryChanged);
+  $('#explore-state').addEventListener('change', exploreStateChanged);
+
+  const regionName = code => {
+    const R = exploreRegions, all = R.countries.concat(R.states[code.slice(0, 2)] || [], ...Object.values(R.counties));
+    const hit = all.find(r => r[0] === code);
+    return hit ? hit[1] : code;
+  };
+
+  $('#explore-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!current || !exploreRegions) return;
+    const region = $('#explore-county').value || $('#explore-state').value || $('#explore-country').value;
+    const out = $('#explore-result'), btn = e.target.querySelector('button');
+    btn.disabled = true;
+    out.innerHTML = '<p class="working">Asking eBird what\'s been seen in ' + esc(regionName(region)) + ' lately…</p>';
+    try {
+      const reply = await askLyrebird({ action: 'recent', region });
+      if (!reply || !reply.ok) throw new Error((reply && reply.message) || 'no answer');
+      const seen = new Set(current.d.lifers.map(l => l.i));
+      const r = exploreList_(reply, checklist, seen);
+      const day = d => { const t = new Date(String(d) + 'T12:00:00'); return isNaN(t) ? String(d || '') : date(t); };   // the raw date if it can't be read
+      out.innerHTML = '<p class="explore-summary"><strong>' + num(r.newCount) + ' of the ' + num(r.total) + ' species</strong> reported in ' +
+          esc(regionName(region)) + ' in the last ' + reply.days + ' days ' + (r.newCount === 1 ? 'is' : 'are') + ' new for you.</p>' +
+        (r.families.length ? r.families.map(f =>
+          '<section class="explore-family"><h3>' + esc(f.family) + ' <span class="sci">' + esc(f.familyLatin) + '</span></h3><ul>' +
+          f.birds.map(b => {
+            const sp = checklist.species[b.i];
+            return '<li>' + birdIcon(b.sci, sp.family, sp.order, 32) + '<span class="explore-bird">' + birdButton(b.sci, esc(b.common)) + localNameHtml(b.i) +
+              '<span class="explore-when">Last reported ' + esc(day(b.date)) + (b.loc ? ' · ' + esc(b.loc) : '') + '</span></span></li>';
+          }).join('') + '</ul></section>').join('')
+          : '<p class="ai-note">You\'ve seen every species reported here lately. Impressive!</p>');
+    } catch (err) {
+      out.innerHTML = '<p class="ai-note">Sorry, the sightings couldn\'t be fetched just now (' + esc(err.message) + ').</p>';
+    } finally {
+      btn.disabled = false;
+      redrawTrail();
+    }
+  });
+
   // ---------- Names to check: suggestions, Accept, Don't count it, Undo ----------
   const commonName = sci => { const i = checklist.bySci.get(String(sci).toLowerCase()); return i === undefined ? '' : checklist.species[i].common; };
 
@@ -1091,12 +1164,14 @@
     const anyTotals = rows.some(r => r.total);
     $('#region-bars').innerHTML =
       '<li class="country-head"><button type="button" class="text-button" data-act="world">← Back to world</button>' +
-        '<span class="country-title">' + esc(countryName(cc)) + '</span>' +
+        '<span class="country-title">' + esc(countryName(cc)) + ' <button type="button" class="text-button explore-link" data-explore="' + esc(cc) + '">Explore new birds here</button></span>' +
         '<span class="note">' + num(rows.length) + ' ' + unit[rows.length === 1 ? 0 : 1] + ' birded. ' +
         (anyTotals ? 'Bars show how many of the species ever recorded there (eBird) you\'ve seen.' : 'Shaded by species recorded.') + '</span></li>' +
       rows.map(r => {
         const pctSeen = r.total ? Math.min(1, r.species / r.total) : null;
-        return '<li><div class="row"><span class="name">' + esc(r.name) + (r.unmapped ? ' <span class="note">(not on the map)</span>' : '') + '</span>' +
+        const ebirdCode = exploreCodeFor(cc, level, r);
+        return '<li><div class="row"><span class="name">' + esc(r.name) + (r.unmapped ? ' <span class="note">(not on the map)</span>' : '') +
+            (ebirdCode ? ' <button type="button" class="text-button explore-link" data-explore="' + esc(ebirdCode) + '">Explore</button>' : '') + '</span>' +
           '<span class="figs">' + num(r.species) + (r.total ? ' / ' + num(r.total) + ' · ' + pct(pctSeen) : ' species') +
           ' · ' + num(r.lifers) + ' lifer' + (r.lifers === 1 ? '' : 's') + '</span></div>' +
           (pctSeen === null ? '' : '<div class="track" aria-hidden="true"><div class="fill" style="width:' + (pctSeen * 100).toFixed(2) + '%"></div></div>') + '</li>';
@@ -1112,7 +1187,39 @@
     redrawTrail();
   }
 
-  $('#region-bars').addEventListener('click', e => { if (e.target.closest('[data-act="world"]')) closeCountry(); });
+  $('#region-bars').addEventListener('click', e => {
+    if (e.target.closest('[data-act="world"]')) closeCountry();
+    const x = e.target.closest('[data-explore]');
+    if (x) exploreAt(x.dataset.explore);
+  });
+
+  /**
+   * A map row's eBird region code, for Explore: state rows already use eBird's codes; counties on
+   * the map come from Natural Earth, so they're matched to eBird's counties by name.
+   */
+  function exploreCodeFor(cc, level, r) {
+    if (!exploreRegions) return '';
+    if (level !== 'counties') return /^[A-Z]{2}-[A-Z0-9]+$/.test(r.code || '') ? r.code : '';
+    const tidy = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+    for (const [state, list] of Object.entries(exploreRegions.counties)) {
+      if (state.slice(0, 2) !== cc) continue;
+      const hit = list.find(c => tidy(c[1]) === tidy(r.name));
+      if (hit) return hit[0];
+    }
+    return '';
+  }
+
+  /** Fills in Explore's place picker with an eBird region code, and shows that place's new birds. */
+  function exploreAt(code) {
+    if (!exploreRegions) return;
+    $('#explore-country').value = code.slice(0, 2);
+    exploreCountryChanged();
+    const parts = code.split('-');
+    if (parts.length >= 2) { $('#explore-state').value = parts[0] + '-' + parts[1]; exploreStateChanged(); }
+    if (parts.length === 3) $('#explore-county').value = code;
+    $('#explore-plate').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('#explore-form').requestSubmit();
+  }
   $('#map-countries').addEventListener('click', e => {
     const b = e.target.closest('button[data-cc]');
     if (b) { openCountry(b.dataset.cc); $('#map').scrollIntoView({ behavior: 'smooth', block: 'center' }); }

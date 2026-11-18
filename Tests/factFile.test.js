@@ -203,3 +203,24 @@ test('sounds: each recording gets a label and the credit its licence asks for', 
   assert.equal(call('soundInfo_', { id: '1', type: 'alarm call, flight call', lic: '' }).type, 'Call');
   assert.equal(call('soundInfo_', { id: '2', type: 'emus', lic: '' }).type, 'Sound');     // anything else
 });
+
+test('Explore: recent sightings become the species you haven\'t seen, by family', () => {
+  ctx.AVILIST = data('avilist.json');
+  run('var CLX = loadChecklist_(AVILIST)');
+  const idx = sci => run('CLX.bySci.get("' + sci.toLowerCase() + '")');
+  const code = sci => run('CLX.species[' + idx(sci) + '].code');
+  ctx.REPLY = { ok: true, species: [
+    { code: code('Erithacus rubecula'), date: '2026-11-17', loc: 'Minsmere RSPB' },
+    { code: code('Pyrrhula pyrrhula'), date: '2026-11-16', loc: '' },
+    { code: code('Panurus biarmicus'), date: '2026-11-15', loc: 'Minsmere RSPB' },
+    { code: 'notacode9', date: '2026-11-15', loc: '' }] };
+  ctx.SEEN = new Set([idx('Erithacus rubecula')]);
+  const r = plain(run('exploreList_(REPLY, CLX, SEEN)'));
+  assert.equal(r.total, 3);
+  assert.equal(r.newCount, 2);                        // the robin is already on the list
+  assert.equal(r.unmatched, 1);
+  assert.deepEqual(r.families.map(f => [f.familyLatin, f.birds.map(b => b.common)]),
+    [['Panuridae', ['Bearded Reedling']], ['Fringillidae', ['Eurasian Bullfinch']]]);   // checklist order
+  assert.deepEqual(r.families[1].birds[0], { i: idx('Pyrrhula pyrrhula'), sci: 'Pyrrhula pyrrhula', common: 'Eurasian Bullfinch', date: '2026-11-16', loc: '' });
+  assert.equal(plain(run('exploreList_(null, CLX, SEEN)')).total, 0);
+});

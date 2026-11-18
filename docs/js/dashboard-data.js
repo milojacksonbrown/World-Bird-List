@@ -1025,3 +1025,34 @@ function quizScopeQuery_(q) {
   const filters = q.filters.filter(f => f.field !== 'seen').concat([{ field: 'seen', op: 'eq', value: true }]);
   return { problem: '', query: Object.assign({}, q, { filters, limit: Infinity, columns: [] }) };
 }
+
+// ---------- Explore: birds reported near you lately that aren't on your list ----------
+
+/**
+ * eBird's recent sightings for a place (via Lyrebird), as the species you haven't seen,
+ * grouped by family in checklist order. eBird's species codes are matched through AviList's
+ * own eBird codes; a code AviList doesn't have (rare: a taxonomy difference) is counted, not shown.
+ * @param {Object} reply  {ok, species: [{code, date, loc}]} from Lyrebird's "recent" action
+ * @param {Object} checklist  loadChecklist_ result
+ * @param {Set<number>} seen  checklist indexes of your lifers
+ * @return {{total:number, newCount:number, unmatched:number, families:Array<{family, familyLatin, birds:Array}>}}
+ */
+function exploreList_(reply, checklist, seen) {
+  const byCode = new Map();
+  checklist.species.forEach(sp => { if (sp.code) byCode.set(sp.code, sp); });
+  const families = new Map();
+  let total = 0, unmatched = 0, newCount = 0;
+  ((reply && reply.species) || []).forEach(o => {
+    const sp = byCode.get(o && o.code);
+    if (!sp) { unmatched++; return; }
+    total++;
+    if (seen.has(sp.i)) return;
+    newCount++;
+    const f = families.get(sp.family) || { family: sp.familyEn || sp.family, familyLatin: sp.family, first: sp.i, birds: [] };
+    f.birds.push({ i: sp.i, sci: sp.sci, common: sp.common, date: String(o.date || ''), loc: String(o.loc || '') });
+    families.set(sp.family, f);
+  });
+  const list = [...families.values()].sort((a, b) => a.first - b.first);   // checklist (taxonomic) order
+  list.forEach(f => { f.birds.sort((a, b) => a.i - b.i); delete f.first; });
+  return { total, newCount, unmatched, families: list };
+}

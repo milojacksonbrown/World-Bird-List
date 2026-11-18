@@ -17,21 +17,24 @@
  *    - NameFixesAssistant.gs (shared: the name-fix prompt, the Gemini call, the checks)
  *    - AskYourList.gs (shared: the question prompt and the query checker)
  *  and the GEMINI_API_KEY in Project Settings ▸ Script Properties (plus GROQ_API_KEY
- *  if a Groq model is used).
+ *  if a Groq model is used, and EBIRD_API_KEY for Explore).
  *
- *  It does two jobs ("actions"):
+ *  It does three jobs ("actions"):
  *    - nameFix: pick the AviList species an unmatched eBird name belongs to
  *    - query:   turn a question about your list into a checked query. Only the
  *               question is sent; the website runs the query on your data.
+ *    - recent:  for Explore, the species eBird has had reported in a country, state or
+ *               county in the last 30 days (no AI; remembered for an hour per place).
  *
  *  Deploy ▸ New deployment ▸ Web app, Execute as: Me, Who has access: Anyone.
  *
  *  Safety:
  *    - Only known actions, with size limits on everything (checkRequest_).
- *    - A daily cap on Gemini calls, shared by everyone (DAILY_CAP).
+ *    - A daily cap on Gemini calls, shared by everyone (DAILY_CAP), and another on
+ *      eBird requests for Explore (RECENT_CAP).
  *    - Gemini's answer is checked here (against the shortlist, or against the
  *      list of allowed tables and fields), and again by the website.
- *    - Nothing is stored except today's count.
+ *    - Nothing is stored except today's counts (and, for an hour, each place's eBird answer).
  *
  *  Models: Gemini 3 Flash first; if it's out of free quota or busy, the
  *  backup Gemma 4 model answers instead. Script Property AI_MODELS can set
@@ -42,11 +45,14 @@
 const LYREBIRD = {
   // Shown when the web address is opened, so you can tell which code is live.
   // Change it whenever you publish a new version.
-  VERSION: '2026-11-12 (session 4f)',
+  VERSION: '2026-11-18 (explore)',
   DAILY_CAP: 200,          // Gemini calls per day, for everyone together
   MAX_TEXT: 120,           // longest name accepted, in characters
   MAX_SHORTLIST: 20,       // most candidates accepted
-  ACTIONS: ['nameFix', 'query'],
+  ACTIONS: ['nameFix', 'query', 'recent'],
+  RECENT_CAP: 500,         // eBird requests per day for Explore, for everyone together
+  RECENT_DAYS: 30,         // "recent" = reported in the last 30 days
+  RECENT_CACHE_S: 3600,    // each place's answer is remembered for an hour
 };
 
 /** Opening the web address in a browser shows that Lyrebird is running. */
@@ -66,7 +72,12 @@ function doGet() {
  * Reply: { "ok": true, "status": "query", "query": {…}, "reason": "…" }
  *    or: { "ok": true, "status": "cannot" | "invalid", "reason": "…" }
  *
- * Either may fail with: { "ok": false, "error": "bad-request" | "limit" | "not-configured" | "ai-unavailable", "message": "…" }
+ * or the birds reported recently in a place (for Explore; no AI involved):
+ *   { "action": "recent", "region": "GB-ENG-SUF" }
+ * Reply: { "ok": true, "region": "GB-ENG-SUF", "days": 30, "species": [{ "code": "eurrob1", "date": "2026-11-17", "loc": "Minsmere RSPB" }, …] }
+ *   ("loc" is empty where eBird marks the place private, e.g. someone's garden)
+ *
+ * Any may fail with: { "ok": false, "error": "bad-request" | "limit" | "not-configured" | "ai-unavailable" | "ebird-unavailable", "message": "…" }
  */
 function doPost(e) {
   let body;
@@ -77,6 +88,7 @@ function doPost(e) {
   }
   const req = checkRequest_(body);
   if (req.problem) return json_({ ok: false, error: 'bad-request', message: req.problem });
+  if (req.action === 'recent') return json_(recentSightings_(req.region));
 
   const props = PropertiesService.getScriptProperties();
   const key = props.getProperty('GEMINI_API_KEY') || '';
@@ -120,6 +132,12 @@ function checkRequest_(b) {
   if (!b || typeof b !== 'object' || Array.isArray(b)) return { problem: 'Missing request.' };
   if (!LYREBIRD.ACTIONS.includes(b.action)) return { problem: 'Unknown action.' };
 
+  if (b.action === 'recent') {
+    // An eBird region code: a country (GB), a state (GB-ENG) or a county (GB-ENG-SUF)
+    if (typeof b.region !== 'string' || !/^[A-Z]{2}(-[A-Z0-9]{1,4}){0,2}$/.test(b.region)) return { problem: 'The region must be an eBird region code, e.g. GB or GB-ENG-SUF.' };
+    return { problem: '', action: 'recent', region: b.region };
+  }
+
   if (b.action === 'query') {
     if (typeof b.question !== 'string' || !b.question.trim()) return { problem: 'The question is missing.' };
     if (b.question.length > ASK.MAX_QUESTION) return { problem: 'The question is too long (at most ' + ASK.MAX_QUESTION + ' characters).' };
@@ -145,6 +163,36 @@ function checkRequest_(b) {
   };
 }
 
+/**
+ * The species reported in a region in the last RECENT_DAYS days, from eBird, for Explore.
+ * Uses the eBird key in Script Properties (EBIRD_API_KEY); remembers each region's answer
+ * for an hour, so repeated clicks don't call eBird again; and has its own daily cap.
+ * Only what the website needs is passed on: species code, last date, and the place name
+ * unless eBird marks it private.
+ */
+function recentSightings_(region) {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('recent:' + region);
+  if (cached) return JSON.parse(cached);
+  const key = PropertiesService.getScriptProperties().getProperty('EBIRD_API_KEY') || '';
+  if (!key) return { ok: false, error: 'not-configured', message: 'Explore is not set up yet (no eBird key).' };
+  if (!takeFromDailyAllowance_('EBIRD_', LYREBIRD.RECENT_CAP)) {
+    return { ok: false, error: 'limit', message: 'Explore has reached its limit for today. Please try again tomorrow.' };
+  }
+  const url = 'https://api.ebird.org/v2/data/obs/' + encodeURIComponent(region) + '/recent?back=' + LYREBIRD.RECENT_DAYS + '&cat=species';
+  const res = UrlFetchApp.fetch(url, { headers: { 'X-eBirdApiToken': key }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return { ok: false, error: 'ebird-unavailable', message: 'eBird answered ' + res.getResponseCode() + '.' };
+  const seen = new Set(), species = [];
+  JSON.parse(res.getContentText()).forEach(o => {
+    if (!o || !o.speciesCode || seen.has(o.speciesCode)) return;
+    seen.add(o.speciesCode);
+    species.push({ code: String(o.speciesCode), date: String(o.obsDt || '').slice(0, 10), loc: o.locationPrivate ? '' : String(o.locName || '').slice(0, 120) });
+  });
+  const out = { ok: true, region, days: LYREBIRD.RECENT_DAYS, species };
+  try { cache.put('recent:' + region, JSON.stringify(out), LYREBIRD.RECENT_CACHE_S); } catch (e) { /* too big to remember: fine */ }
+  return out;
+}
+
 /** Today's date as the key for the daily count, e.g. "2026-11-11" (UTC). */
 function dayKey_(date) {
   return date.toISOString().slice(0, 10);
@@ -159,16 +207,18 @@ function usedToday_() {
  * Takes one Gemini call from today's allowance. Returns false if none are left.
  * The lock stops two requests arriving together from both taking the last one.
  */
-function takeFromDailyAllowance_() {
+function takeFromDailyAllowance_(prefix, cap) {
+  prefix = prefix || 'USED_';                          // USED_ for the AI; EBIRD_ for Explore
+  cap = cap || LYREBIRD.DAILY_CAP;
   const lock = LockService.getScriptLock();
   lock.waitLock(5000);
   try {
     const props = PropertiesService.getScriptProperties();
-    const key = 'USED_' + dayKey_(new Date());
+    const key = prefix + dayKey_(new Date());
     const used = Number(props.getProperty(key) || 0);
-    if (used >= LYREBIRD.DAILY_CAP) return false;
+    if (used >= cap) return false;
     if (used === 0) {                                    // a new day: tidy away old counts
-      props.getKeys().filter(k => k.indexOf('USED_') === 0 && k !== key).forEach(k => props.deleteProperty(k));
+      props.getKeys().filter(k => k.indexOf(prefix) === 0 && k !== key).forEach(k => props.deleteProperty(k));
     }
     props.setProperty(key, String(used + 1));
     return true;
