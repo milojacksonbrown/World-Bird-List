@@ -639,7 +639,113 @@
     $('#explore-country').innerHTML = optionsHtml(R.countries);
     $('#explore-country').value = R.countries.some(c => c[0] === cc) ? cc : R.countries[0][0];
     exploreCountryChanged();
+    exploreMapWorld();
   }
+
+  // ---------- Explore's own map: click any country, then a state (and a county where eBird has them) ----------
+  // Separate from the main map, which is about your list: this one is for choosing somewhere to explore.
+  // The state shapes are the same files the main map zooms into (docs/data/regions/, Natural Earth);
+  // their codes are the international ones eBird also uses, so most match directly, and the rest
+  // (and counties) are matched by name. Clicking a place fills in the picker below and shows its birds.
+  let xMap = null, xWorld = null, xStates = null, xPlace = null;
+  const tidyName = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+  const xStyle = { color: () => css('--rule'), base: () => css('--paper'), hover: () => css('--green-soft'), picked: () => css('--season-june') || '#e0a37c' };
+
+  async function exploreMapWorld() {
+    if (!window.L || !$('#explore-map')) return;
+    const world = await loadWorld().catch(() => null);
+    if (!world) { $('#explore-map').hidden = true; return; }
+    if (!xMap) {
+      xMap = L.map('explore-map', { worldCopyJump: true, minZoom: 1, maxZoom: 9, zoomSnap: 0.25, attributionControl: false, scrollWheelZoom: false });
+      xWorld = L.geoJSON(world, {
+        style: () => ({ color: xStyle.color(), weight: 0.6, fillColor: xStyle.base(), fillOpacity: 1 }),
+        onEachFeature: (f, layer) => {
+          const cc = countryCode_(f.properties);
+          layer.bindTooltip(esc(countryName(cc)), { sticky: true });
+          layer.on('click', () => exploreMapCountry(cc));
+        },
+      }).addTo(xMap);
+    }
+    if (xStates) { xStates.remove(); xStates = null; }
+    xWorld.setStyle({ fillColor: xStyle.base(), fillOpacity: 1, opacity: 1 });
+    xMap.invalidateSize();
+    xMap.fitBounds([[-55, -168], [78, 180]]);
+    xPlace = null;
+    exploreTrail([]);
+  }
+
+  async function regionFile(cc) {
+    if (!regionFiles.has(cc)) {
+      try { const res = await fetch('data/regions/' + cc + '.json'); regionFiles.set(cc, res.ok ? await res.json() : null); }
+      catch (e) { regionFiles.set(cc, null); }
+    }
+    return regionFiles.get(cc);
+  }
+
+  /** eBird's code for a state on the map: the same code if eBird has it, else matched by name, else none. */
+  function ebirdState(cc, code, name) {
+    const states = exploreRegions.states[cc] || [];
+    return (states.find(s => s[0] === code) || states.find(s => tidyName(s[1]) === tidyName(name)) || [])[0] || '';
+  }
+
+  /** A country on the Explore map: its states drawn, the country's birds shown. */
+  async function exploreMapCountry(cc, parent) {
+    const file = await regionFile(cc);
+    const all = file ? Object.entries(file.regions) : [];
+    // Top level: the regions with no parent; one level down: the parent's parts (counties, départements)
+    const shapes = all.filter(([, r]) => (parent ? r.in === parent : !r.in) && r.polys && r.polys.length);
+    xWorld.setStyle(f => (countryCode_(f.properties) === cc ? { fillOpacity: 0, opacity: 0 } : { fillColor: xStyle.base(), fillOpacity: 0.4, opacity: 0.4 }));
+    if (xStates) xStates.remove();
+    xStates = L.geoJSON({ type: 'FeatureCollection', features: shapes.map(([code, r]) =>
+      ({ type: 'Feature', properties: { code, name: r.name, hasParts: !parent && all.some(([, x]) => x.in === code) }, geometry: { type: 'MultiPolygon', coordinates: r.polys } })) }, {
+      style: () => ({ color: xStyle.color(), weight: 0.8, fillColor: xStyle.base(), fillOpacity: 1 }),
+      onEachFeature: (f, layer) => {
+        layer.bindTooltip(esc(f.properties.name), { sticky: true });
+        layer.on('click', () => exploreMapPlace(cc, parent, f.properties, layer));
+      },
+    }).addTo(xMap);
+    const bounds = xStates.getLayers().length ? xStates.getBounds() : null;
+    if (bounds && bounds.isValid()) xMap.fitBounds(bounds, { padding: [10, 10], maxZoom: 7 });
+    else xWorld.eachLayer(l => { if (countryCode_(l.feature.properties) === cc) xMap.fitBounds(l.getBounds(), { maxZoom: 6 }); });
+    if (parent) {
+      exploreTrail([[cc, countryName(cc)], [parent, (file.regions[parent] || {}).name || parent]]);
+      exploreAt(ebirdState(cc, parent, (file.regions[parent] || {}).name) || cc, { scroll: false });
+    } else {
+      exploreTrail([[cc, countryName(cc)]]);
+      exploreAt(cc, { scroll: false });
+    }
+  }
+
+  /** A state or county clicked on the Explore map. */
+  function exploreMapPlace(cc, parent, p, layer) {
+    // A state with parts that eBird has counties for: zoom in to choose a county
+    const state = parent ? ebirdState(cc, parent, '') : ebirdState(cc, p.code, p.name);
+    if (!parent && p.hasParts && state && (exploreRegions.counties[state] || []).length) { exploreMapCountry(cc, p.code); return; }
+    let code = state;
+    if (parent) {
+      const county = (exploreRegions.counties[state] || []).find(c => tidyName(c[1]) === tidyName(p.name));
+      code = county ? county[0] : state;              // a county eBird doesn't list: its state instead
+    }
+    xStates.setStyle(f => ({ color: xStyle.color(), weight: 0.8, fillColor: f.properties === p ? xStyle.picked() : xStyle.base(), fillOpacity: 1 }));
+    const parentName = parent ? ((regionFiles.get(cc) || { regions: {} }).regions[parent] || {}).name || parent : '';
+    exploreTrail([[cc, countryName(cc)]].concat(parent ? [[parent, parentName]] : [], [[p.code, p.name]]));
+    exploreAt(code || cc, { scroll: false });
+  }
+
+  /** "World › United Kingdom › England": where you are, with a way back up. */
+  function exploreTrail(steps) {
+    const names = steps.filter(s => s[1]);
+    $('#explore-trail').innerHTML = (names.length ? '<button type="button" class="text-button" data-xgo="world">World</button>' : '<span>Click a country</span>') +
+      names.map((s, i) => ' › ' + (i < names.length - 1 ? '<button type="button" class="text-button" data-xgo="' + esc(s[0]) + '">' + esc(s[1]) + '</button>' : '<strong>' + esc(s[1]) + '</strong>')).join('');
+  }
+  $('#explore-trail').addEventListener('click', e => {
+    const b = e.target.closest('[data-xgo]');
+    if (!b) return;
+    const go = b.dataset.xgo;
+    if (go === 'world') exploreMapWorld();
+    else if (/^[A-Z]{2}$/.test(go)) exploreMapCountry(go);
+    else exploreMapCountry(go.slice(0, 2), go);
+  });
   function exploreCountryChanged() {
     const R = exploreRegions, cc = $('#explore-country').value;
     $('#explore-state').innerHTML = optionsHtml((R.states[cc] || []), 'All of it');
@@ -1210,14 +1316,14 @@
   }
 
   /** Fills in Explore's place picker with an eBird region code, and shows that place's new birds. */
-  function exploreAt(code) {
+  function exploreAt(code, opts) {
     if (!exploreRegions) return;
     $('#explore-country').value = code.slice(0, 2);
     exploreCountryChanged();
     const parts = code.split('-');
     if (parts.length >= 2) { $('#explore-state').value = parts[0] + '-' + parts[1]; exploreStateChanged(); }
     if (parts.length === 3) $('#explore-county').value = code;
-    $('#explore-plate').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!opts || opts.scroll !== false) $('#explore-plate').scrollIntoView({ behavior: 'smooth', block: 'start' });
     $('#explore-form').requestSubmit();
   }
   $('#map-countries').addEventListener('click', e => {

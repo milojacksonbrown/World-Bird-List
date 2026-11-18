@@ -188,7 +188,12 @@
 
     <section id="explore-plate" class="plate" aria-labelledby="explore-title">
       <h2 id="explore-title">Explore</h2>
-      <p class="caption">Birds reported somewhere in the last 30 days that you haven't seen yet: what you could find there now.</p>
+      <p class="caption">Birds reported somewhere in the last 30 days that you haven't seen yet: what you could find there now.
+        Click any country on the map, then a state or province (and in some countries a county), or choose below.</p>
+      <div class="explore-where">
+        <nav id="explore-trail" class="explore-trail" aria-label="Where you're exploring"></nav>
+        <div id="explore-map" class="explore-map" role="img" aria-label="World map for choosing a place to explore. The place picker below does the same."></div>
+      </div>
       <form id="explore-form" class="explore-form">
         <label>Country <select id="explore-country"></select></label>
         <label>State or province <select id="explore-state"><option value="">All of it</option></select></label>

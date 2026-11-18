@@ -31,7 +31,7 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 - **Where in the world:** a map of countries birded, shaded by the % of the species recorded there (eBird) that you've seen, and bars showing how much of each region's birds you've seen. Click a country to zoom into its states and provinces (counties in the UK, France, Ireland and Indonesia), shaded the same way, with species, lifers and the % of the species eBird has recorded there.
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
 - **Latest lifers:** the first time each species was seen, newest first (the latest 10, then 50, 100 or all, with Show fewer at the top and bottom), with a search box and an illustrated sticker of each bird. Where a species has no sticker, a field-guide silhouette of its body shape (heron, wader, owl, finch…) stands in: all 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
-- **Explore:** pick a country, state or county (or click *Explore* beside one on the map) and see the birds reported there in the last 30 days that aren't on your list yet, grouped by family with when and where each was last reported: what you could find there now.
+- **Explore:** click any country on Explore's own map, then a state or county (or pick from the lists, or click *Explore* beside a place on the main map) and see the birds reported there in the last 30 days that aren't on your list yet, grouped by family with when and where each was last reported: what you could find there now.
 - **Quiz me on…:** type what you'd like to be quizzed on (*birds I saw in Thailand*, *my 2025 lifers*, *owls*) and the quiz uses just those birds, with every other setting (picture or sound, easy or hard) as usual. It reuses Ask your list: the AI turns the request into a search, the checker verifies it, and the page keeps it to species you've seen, refusing anything that isn't a group of birds.
 - **Bird sounds:** fact files play each bird's song and call, from xeno-canto, credited to their recordists. 10,041 of 11,025 living species (91%) have a recording.
 - **Test yourself:** a quiz on your own lifers, by picture or **by ear** (a song or call plays and you name the bird). For pictures, a sticker appears and you name the bird, choosing from four names or typing it. In *hard* mode the wrong answers are lookalikes from the same family (woodswallows against butcherbirds); typed answers accept any of the bird's names, American spellings, the scientific name, the name without its first word ("Bullfinch") when no other bird has that name, and small spelling slips (one letter in eight). Ten birds a round, with the ones you missed to look at again and your best score kept in your browser.
@@ -97,7 +97,9 @@ eBird's API can say which species have been reported in a place in the last 30 d
 
 - **Through Lyrebird, so the key stays private.** Lyrebird has a third job, `recent`, separate from the AI: it takes an eBird region code (checked against a strict pattern), adds the eBird key from its settings, and passes on only the species code, the last date, and the place name unless eBird marks it private (often someone's garden).
 - **Polite to eBird.** Each place's answer is remembered for an hour (Apps Script's cache), so repeated clicks don't call eBird again, and Explore has its own daily cap, separate from the AI's.
+- **A bug worth remembering.** Lyrebird tidies away old daily counters by name, and Explore's counter was called `EBIRD_` + date, so the tidy-up also deleted `EBIRD_API_KEY`: each time the key was added, one request worked and then it vanished. The tidy-up now only removes names that are a prefix followed by a date, the counter is called `RECENT_`, and a test checks the keys survive.
 - **Matched by eBird's own codes.** AviList records the eBird code for every species, so eBird's answer maps straight onto your list; the page then lists the species you haven't seen, by family, in checklist order.
+- **Its own map, so anywhere can be explored.** The main map is about your list, so Explore has a separate one: every country is clickable, then its states and provinces (the same Natural Earth shapes the main map zooms into), and in the UK, France, Ireland and Indonesia a second level of counties. Natural Earth's state codes are the international ISO ones eBird uses too, so they match directly (Victoria is `AU-VIC`, California `US-CA`); the rest, and counties, are matched by name (Finistère is `FR-BRE-29`).
 - **The right codes for places.** The place picker uses eBird's own country, state and county codes, saved during the region-totals run (`tools/build-explore-regions.js`). The map's county shapes come from Natural Earth, with different codes, so the map's *Explore* links match counties to eBird's by name.
 
 ## Bird sounds
@@ -144,7 +146,7 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
 
 ## Testing
 
-- **150 automated tests** (`node --test`) cover:
+- **151 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers

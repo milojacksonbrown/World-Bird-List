@@ -55,7 +55,7 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
 test('opening the web address shows it is running, without revealing the key', () => {
   const { run } = setup();
   const text = run('doGet')().text;
-  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-18 (explore)', actions: ['nameFix', 'query', 'recent'], usedToday: 0, dailyCap: 200 });
+  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-18 (explore, key fix)', actions: ['nameFix', 'query', 'recent'], usedToday: 0, dailyCap: 200 });
   assert.ok(!text.includes(KEY));
 });
 
@@ -334,7 +334,7 @@ test('recent: a place asked about again within the hour comes from memory, not e
   post(JSON.stringify({ action: 'recent', region: 'GB' }));
   post(JSON.stringify({ action: 'recent', region: 'GB' }));
   assert.equal(calls.length, 1);
-  assert.equal(store.get('EBIRD_' + new Date().toISOString().slice(0, 10)), '1');   // counted once, separately from the AI
+  assert.equal(store.get('RECENT_' + new Date().toISOString().slice(0, 10)), '1');  // counted once, separately from the AI
 });
 
 test('recent: bad region codes, no eBird key, and eBird errors', () => {
@@ -344,4 +344,17 @@ test('recent: bad region codes, no eBird key, and eBird errors', () => {
   }
   assert.equal(setup().post(JSON.stringify({ action: 'recent', region: 'GB' })).error, 'not-configured');
   assert.equal(setup({ props: { EBIRD_API_KEY: EBIRD_KEY }, ebirdReply: [403, {}] }).post(JSON.stringify({ action: 'recent', region: 'GB' })).error, 'ebird-unavailable');
+});
+
+test('a new day\'s tidy-up removes only old counters, never the keys', () => {
+  // The first version deleted every setting starting EBIRD_, including EBIRD_API_KEY
+  const { post, store } = setup({ props: { EBIRD_API_KEY: EBIRD_KEY, GROQ_API_KEY: 'groq-key',
+    'RECENT_2026-01-01': '9', 'USED_2026-01-01': '9', RECENT_NOTES: 'keep me' }, ebirdReply: [200, OBS] });
+  assert.equal(post(JSON.stringify({ action: 'recent', region: 'GB' })).ok, true);
+  assert.equal(post(JSON.stringify({ action: 'recent', region: 'FR' })).ok, true);   // the key is still there for the next request
+  assert.equal(store.get('EBIRD_API_KEY'), EBIRD_KEY);
+  assert.equal(store.get('GROQ_API_KEY'), 'groq-key');
+  assert.equal(store.has('RECENT_2026-01-01'), false);          // yesterday's counter, tidied away
+  assert.equal(store.get('RECENT_NOTES'), 'keep me');            // not a counter: left alone
+  assert.equal(store.get('USED_2026-01-01'), '9');               // the AI's counters are the AI's business
 });

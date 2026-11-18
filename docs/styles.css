@@ -582,3 +582,11 @@ html { scroll-behavior: smooth; }
 .explore-bird { display: flex; flex-direction: column; min-width: 0; }
 .explore-when { font-size: 0.8rem; color: var(--ink-soft); }
 .explore-link { font-size: 0.82rem; margin-left: 4px; }
+
+/* Explore's own map */
+.explore-where { margin-bottom: 14px; }
+.explore-trail { font-size: 0.92rem; color: var(--ink-soft); margin-bottom: 6px; min-height: 1.4em; }
+.explore-trail .text-button { padding: 0; }
+.explore-map { isolation: isolate; height: 340px; border: 1px solid var(--rule); background: var(--sea); }
+.explore-map .leaflet-interactive:hover { fill: var(--green-soft); fill-opacity: 0.35; }
+@media (max-width: 640px) { .explore-map { height: 260px; } }

@@ -45,7 +45,7 @@
 const LYREBIRD = {
   // Shown when the web address is opened, so you can tell which code is live.
   // Change it whenever you publish a new version.
-  VERSION: '2026-11-18 (explore)',
+  VERSION: '2026-11-18 (explore, key fix)',
   DAILY_CAP: 200,          // Gemini calls per day, for everyone together
   MAX_TEXT: 120,           // longest name accepted, in characters
   MAX_SHORTLIST: 20,       // most candidates accepted
@@ -176,7 +176,7 @@ function recentSightings_(region) {
   if (cached) return JSON.parse(cached);
   const key = PropertiesService.getScriptProperties().getProperty('EBIRD_API_KEY') || '';
   if (!key) return { ok: false, error: 'not-configured', message: 'Explore is not set up yet (no eBird key).' };
-  if (!takeFromDailyAllowance_('EBIRD_', LYREBIRD.RECENT_CAP)) {
+  if (!takeFromDailyAllowance_('RECENT_', LYREBIRD.RECENT_CAP)) {
     return { ok: false, error: 'limit', message: 'Explore has reached its limit for today. Please try again tomorrow.' };
   }
   const url = 'https://api.ebird.org/v2/data/obs/' + encodeURIComponent(region) + '/recent?back=' + LYREBIRD.RECENT_DAYS + '&cat=species';
@@ -208,7 +208,7 @@ function usedToday_() {
  * The lock stops two requests arriving together from both taking the last one.
  */
 function takeFromDailyAllowance_(prefix, cap) {
-  prefix = prefix || 'USED_';                          // USED_ for the AI; EBIRD_ for Explore
+  prefix = prefix || 'USED_';                          // USED_ for the AI; RECENT_ for Explore
   cap = cap || LYREBIRD.DAILY_CAP;
   const lock = LockService.getScriptLock();
   lock.waitLock(5000);
@@ -218,7 +218,9 @@ function takeFromDailyAllowance_(prefix, cap) {
     const used = Number(props.getProperty(key) || 0);
     if (used >= cap) return false;
     if (used === 0) {                                    // a new day: tidy away old counts
-      props.getKeys().filter(k => k.indexOf(prefix) === 0 && k !== key).forEach(k => props.deleteProperty(k));
+      // Only counters: the prefix followed by a date. (A looser match once deleted EBIRD_API_KEY.)
+      const counter = new RegExp('^' + prefix + '\\d{4}-\\d{2}-\\d{2}$');
+      props.getKeys().filter(k => counter.test(k) && k !== key).forEach(k => props.deleteProperty(k));
     }
     props.setProperty(key, String(used + 1));
     return true;
