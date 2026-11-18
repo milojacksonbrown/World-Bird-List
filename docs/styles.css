@@ -545,3 +545,18 @@ html { scroll-behavior: smooth; }
 .ff-local { margin: 2px 0 0 !important; font-family: var(--serif); font-size: 1.2rem; color: var(--green-soft); }
 .quiz-local { display: block; font-weight: 400; font-size: 0.85rem; color: inherit; opacity: 0.8; }
 .quiz-option { flex-direction: column; gap: 0; }
+
+/* ---------- bird sounds (xeno-canto) ---------- */
+.sounds { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+@media (max-width: 640px) { .sounds { grid-template-columns: 1fr; } }
+.sound-label { font-weight: 600; font-size: 0.92rem; margin-bottom: 4px; }
+.sound audio { display: block; width: 100%; height: 36px; }
+.sound-credit { margin-top: 3px; font-size: 0.75rem; color: var(--ink-soft); }
+
+/* The sound quiz: a recording in place of the picture, which is revealed after answering */
+.quiz-sound { margin: 12px auto 0; padding: 22px 18px 14px; max-width: 420px; border: 1px solid var(--rule); border-radius: 14px; background: var(--paper); }
+.quiz-sound-icon { font-size: 2.6rem; line-height: 1; color: var(--green-soft); margin-bottom: 10px; }
+.quiz-sound audio { width: 100%; }
+.quiz-sound .sound-credit { margin: 6px 0 0; }
+.quiz-reveal { width: min(200px, 60vw); margin-top: 12px; }
+.quiz-reveal[hidden] { display: none; }

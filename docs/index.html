@@ -154,8 +154,13 @@
 
     <section id="quiz-plate" class="plate" aria-labelledby="quiz-title">
       <h2 id="quiz-title">Test yourself</h2>
-      <p class="caption">Can you name your own lifers from a picture? Ten birds a round.</p>
+      <p class="caption">Can you name your own lifers from a picture, or by ear? Ten birds a round.</p>
       <div id="quiz-setup" class="quiz-setup">
+        <fieldset class="quiz-choice">
+          <legend>Name it by</legend>
+          <label><input type="radio" name="quiz-by" value="picture" checked> Its picture</label>
+          <label><input type="radio" name="quiz-by" value="sound"> Its song or call</label>
+        </fieldset>
         <fieldset class="quiz-choice">
           <legend>Answer by</legend>
           <label><input type="radio" name="quiz-mode" value="choice" checked> Choosing from four names</label>
@@ -171,7 +176,8 @@
       </div>
       <div id="quiz-game" class="quiz-game" hidden></div>
       <p class="ai-note quiz-small">The pictures are AI illustrations (huashu-bird-sticker) and a few may not look exactly like the bird.
-        Typed answers can use any of the bird's names, with or without capitals, and small spelling slips are forgiven.</p>
+        Typed answers can use any of the bird's names, with or without capitals, and small spelling slips are forgiven.
+        Recordings are from <a href="https://xeno-canto.org">xeno-canto</a>, each credited to its recordist.</p>
     </section>
 
     <section id="unmatched-plate" class="plate" aria-labelledby="unmatched-title">
@@ -200,6 +206,7 @@
 
   <footer class="colophon">
     <p id="citation"></p>
+    <p>Bird sounds: <a href="https://xeno-canto.org">xeno-canto</a>, each recording by its recordist under the Creative Commons licence shown beside it.</p>
     <p>Range maps: records from <a href="https://www.gbif.org">GBIF.org</a>, including eBird, shown by season.</p>
     <p>Bird names in other languages: <a href="https://www.worldbirdnames.org/">IOC World Bird List</a> v15.2 (Gill, Donsker &amp; Rasmussen), CC BY 3.0, via huashu-bird-sticker.</p>
     <p id="stickers-credit">Bird illustrations: <a href="https://github.com/alchaincyf/huashu-bird-sticker">huashu-bird-sticker</a> by Huashu (<a href="https://birdalbum.com">Bird Album</a>), CC BY 4.0. They are AI-generated and may contain errors.</p>

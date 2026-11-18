@@ -177,6 +177,20 @@
     if (v === 'fewer') $('#lifers-title').scrollIntoView({ block: 'nearest' });
   });
 
+  // ---------- Bird sounds: recordings from xeno-canto, streamed from there when played ----------
+  let soundsLoading = null;
+  const loadSounds = () => (soundsLoading = soundsLoading || fetch('data/sounds.json')
+    .then(r => (r.ok ? r.json() : null)).then(j => (j && j.species) || {}).catch(() => ({})));
+  /** A player for one recording, with its credit (required by its licence). */
+  const soundPlayer = r => {
+    const s = soundInfo_(r);
+    return '<div class="sound"><div class="sound-label">' + esc(s.label) + '</div>' +
+      '<audio controls preload="none" src="' + esc(s.file) + '"></audio>' +
+      '<div class="sound-credit"><a href="' + esc(s.page) + '">' + esc(s.credit.split(',')[0]) + '</a>,' + esc(s.credit.slice(s.credit.indexOf(',') + 1)).replace(/(CC [A-Z-]+ [\d.]+)$/, s.licenceUrl ? '<a href="' + esc(s.licenceUrl) + '">$1</a>' : '$1') + '</div></div>';
+  };
+  // Only one recording plays at a time, anywhere on the page
+  document.addEventListener('play', e => { document.querySelectorAll('audio').forEach(a => { if (a !== e.target) a.pause(); }); }, true);
+
   // ---------- Bird names in other languages (IOC World Bird List, via huashu-bird-sticker) ----------
   // Pick a language and every bird's name in it is shown beside the English one: in the lifer
   // list, answers, fact files and the quiz (where typed answers in it count too). One small file
@@ -226,11 +240,11 @@
     const dlg = $('#factfile');
     $('#factfile-body').innerHTML = '<p class="working">Opening the fact file…</p>';
     if (!dlg.open) dlg.showModal();
-    const [data, ranges] = await Promise.all([askTables(), loadRanges()]);
+    const [data, ranges, sounds] = await Promise.all([askTables(), loadRanges(), loadSounds()]);
     const row = data.species.find(r => r.scientific === sp.sci);
     const lifer = current.d.lifers.find(l => l.sci === sp.sci);
     const f = factFile_(sp, row, { lifer, range: ranges[sp.sci] || '', stickers });
-    $('#factfile-body').innerHTML = factFileHtml(f, row);
+    $('#factfile-body').innerHTML = factFileHtml(f, row, sounds[sp.sci] || []);
     fitFactFileBird(f, row);
     const st = current.d.stats && current.d.stats.species && current.d.stats.species[sp.i];
     drawRangeMap(sp, st && st.points ? [...st.points.values()] : []);
@@ -370,7 +384,7 @@
     }
   }
 
-  function factFileHtml(f, row) {
+  function factFileHtml(f, row, recordings) {
     const list = (title, facts) => facts.length ? '<section class="ff-block"><h3>' + esc(title) + '</h3><dl>' +
       facts.map(x => '<div><dt>' + esc(x.label) + '</dt><dd>' +
         (x.label === 'Main habitat' && HABITAT_ICONS_[x.value] ? '<span class="icon habitat">' + habitatIconSvg_(x.value, 20) + '</span>' + esc(x.value)
@@ -412,6 +426,8 @@
         '<li><span class="sw both"></span>Both</li>' + (f.seen ? '<li><span class="sw mine"></span>Your sightings</li>' : '') + '</ul>' +
         '<p id="ff-map-credit" class="ff-credit"></p></section>' +
       '<div class="ff-grid"><div>' + list('Size', f.size) + sizeComparison(f, row) + '</div>' + list('Life', f.life) + '</div>' +
+      ((recordings || []).length ? '<section class="ff-block ff-sounds"><h3>Sounds</h3><div class="sounds">' + recordings.map(soundPlayer).join('') + '</div>' +
+        '<p class="ff-credit">Recordings from <a href="https://xeno-canto.org">xeno-canto</a>, shared by their recordists.</p></section>' : '') +
       records +
       (f.links.length ? '<p class="ff-links">More: ' + f.links.map(l => '<a href="' + esc(l.url) + '">' + esc(l.label) + '</a>').join(' · ') + '</p>' : '');
   }
@@ -441,7 +457,7 @@
   // ---------- Test yourself: name your lifers from their stickers ----------
   const QUIZ_LENGTH = 10;
   let quiz = null;                     // { mode, level, birds, i, score, missed, answered, options }
-  const quizBestKey = (mode, level) => 'lifelist.quizBest.' + mode + (mode === 'choice' ? '.' + level : '');
+  const quizBestKey = (mode, level, by) => 'lifelist.quizBest.' + (by === 'sound' ? 'sound.' : '') + mode + (mode === 'choice' ? '.' + level : '');
   const readBest = k => { try { return Number(localStorage.getItem(k)) || 0; } catch (e) { return 0; } };
   const quizSetting = name => (document.querySelector('input[name="' + name + '"]:checked') || {}).value;
 
@@ -452,22 +468,29 @@
     quizSettingsChanged();
   }
   function quizSettingsChanged() {
-    const mode = quizSetting('quiz-mode'), level = quizSetting('quiz-level');
+    const mode = quizSetting('quiz-mode'), level = quizSetting('quiz-level'), by = quizSetting('quiz-by');
     $('#quiz-level').hidden = mode !== 'choice';                 // difficulty is about the four names
-    const best = readBest(quizBestKey(mode, level));
+    const best = readBest(quizBestKey(mode, level, by));
     $('#quiz-best').textContent = best ? 'Your best this way: ' + best + ' out of ' + QUIZ_LENGTH + '.' : '';
   }
   document.querySelectorAll('#quiz-setup input').forEach(r => r.addEventListener('change', quizSettingsChanged));
 
-  $('#quiz-start').addEventListener('click', () => {
+  $('#quiz-start').addEventListener('click', async () => {
     if (!current) return;
+    const by = quizSetting('quiz-by');
     const pool = quizPool_(current.d.lifers, checklist, stickers);
-    if (pool.length < 4) {
-      $('#quiz-best').textContent = 'The quiz needs at least four lifers with pictures.';
+    // By ear: only birds with a recording are asked about (any of your lifers can still be a wrong answer)
+    const sounds = by === 'sound' ? await loadSounds() : {};
+    const askable = by === 'sound' ? pool.filter(sp => (sounds[sp.sci] || []).length) : pool;
+    if (askable.length < 4) {
+      $('#quiz-best').textContent = by === 'sound' ? 'The sound quiz needs at least four lifers with recordings.' : 'The quiz needs at least four lifers with pictures.';
       return;
     }
-    quiz = { mode: quizSetting('quiz-mode'), level: quizSetting('quiz-level'), pool,
-      birds: shuffled_(pool, Math.random).slice(0, QUIZ_LENGTH), i: 0, score: 0, missed: [] };
+    const birds = shuffled_(askable, Math.random).slice(0, QUIZ_LENGTH);
+    quiz = { mode: quizSetting('quiz-mode'), level: quizSetting('quiz-level'), by, pool, birds,
+      // one recording per bird, chosen at random from its song and call
+      recordings: by === 'sound' ? birds.map(sp => { const rs = sounds[sp.sci]; return rs[Math.floor(Math.random() * rs.length)]; }) : null,
+      i: 0, score: 0, missed: [] };
     $('#quiz-setup').hidden = true;
     $('#quiz-game').hidden = false;
     quizQuestion();
@@ -480,10 +503,17 @@
       ? quizOptions_(sp, quiz.pool, quiz.level, Math.random, x => birdShape_(x.family, x.order)) : null;
     const next = quiz.birds[quiz.i + 1];
     if (next) new Image().src = stickerFor_(next, stickers).full;   // fetch the next picture while this one is answered
+    const rec = quiz.by === 'sound' ? soundInfo_(quiz.recordings[quiz.i]) : null;
     $('#quiz-game').innerHTML =
       '<div class="quiz-top"><span>Bird ' + (quiz.i + 1) + ' of ' + quiz.birds.length + '</span><span>Score: ' + quiz.score + '</span></div>' +
-      '<figure class="quiz-picture"><img src="' + esc(st.full) + '" alt="A bird to name" width="300" height="300"></figure>' +
-      '<p class="quiz-ask">What\'s this bird?</p>' +
+      (rec
+        // By ear: the recording, and its credit (the XC number links to the species, so it's added after answering)
+        ? '<div class="quiz-sound"><div class="quiz-sound-icon" aria-hidden="true">♪</div>' +
+            '<audio controls autoplay src="' + esc(rec.file) + '"></audio>' +
+            '<p class="sound-credit">' + esc(rec.type) + ' · recording ' + esc(rec.credit.replace(/^XC\d+ /, '')) + '</p></div>' +
+          '<figure class="quiz-picture quiz-reveal" hidden><img src="' + esc(st.full) + '" alt="" width="300" height="300"></figure>'
+        : '<figure class="quiz-picture"><img src="' + esc(st.full) + '" alt="A bird to name" width="300" height="300"></figure>') +
+      '<p class="quiz-ask">' + (rec ? 'Which bird is singing?' : 'What\'s this bird?') + '</p>' +
       (quiz.mode === 'choice'
         ? '<div class="quiz-options">' + quiz.options.map((o, n) =>
             '<button type="button" class="button quiz-option" data-n="' + n + '">' + esc(o.common) +
@@ -505,6 +535,12 @@
     const sp = quiz.birds[quiz.i];
     if (correct) quiz.score++; else quiz.missed.push(sp);
     $('#quiz-game .quiz-top span:last-child').textContent = 'Score: ' + quiz.score;
+    if (quiz.by === 'sound') {                                    // reveal the bird, and the full credit
+      const fig = $('#quiz-game .quiz-reveal');
+      if (fig) { fig.hidden = false; fig.querySelector('img').alt = sp.common; }
+      const rec = soundInfo_(quiz.recordings[quiz.i]), credit = $('#quiz-game .quiz-sound .sound-credit');
+      if (credit) credit.innerHTML = esc(rec.type) + ' · <a href="' + esc(rec.page) + '">' + esc(rec.credit.split(',')[0]) + '</a>,' + esc(rec.credit.slice(rec.credit.indexOf(',') + 1));
+    }
     $('#quiz-game .quiz-feedback').innerHTML = (correct
       ? '<p class="quiz-right">Correct' + (note ? ' (' + esc(note) + ')' : '') + '!</p>'
       : '<p class="quiz-wrong">Not this time. It\'s ' + (/^[aeiou]/i.test(sp.common) ? 'an' : 'a') + ' <strong>' + esc(sp.common) + '</strong>.</p>') +
@@ -519,7 +555,7 @@
   }
 
   function quizEnd() {
-    const key = quizBestKey(quiz.mode, quiz.level), best = readBest(key), newBest = quiz.score > best;
+    const key = quizBestKey(quiz.mode, quiz.level, quiz.by), best = readBest(key), newBest = quiz.score > best;
     if (newBest) { try { localStorage.setItem(key, String(quiz.score)); } catch (e) { /* storage blocked: no record kept */ } }
     $('#quiz-game').innerHTML =
       '<div class="quiz-result"><p class="quiz-final">' + quiz.score + ' out of ' + quiz.birds.length + '</p>' +

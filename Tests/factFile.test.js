@@ -193,3 +193,13 @@ test('names in other languages: one file per language, in AviList order, with th
     assert.equal(f.names[bull], name);
   }
 });
+
+test('sounds: each recording gets a label and the credit its licence asks for', () => {
+  const s = call('soundInfo_', { id: '757203', type: 'song', length: '0:19', rec: 'nick talbot', cnt: 'Australia',
+    lic: 'https://creativecommons.org/licenses/by-nc-sa/4.0/', file: 'https://xeno-canto.org/757203/download' });
+  assert.equal(s.label, 'Song · 0:19 · Australia');
+  assert.equal(s.credit, 'XC757203 by nick talbot, CC BY-NC-SA 4.0');
+  assert.equal(s.page, 'https://xeno-canto.org/757203');
+  assert.equal(call('soundInfo_', { id: '1', type: 'alarm call, flight call', lic: '' }).type, 'Call');
+  assert.equal(call('soundInfo_', { id: '2', type: 'emus', lic: '' }).type, 'Sound');     // anything else
+});

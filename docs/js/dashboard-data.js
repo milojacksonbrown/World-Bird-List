@@ -993,3 +993,22 @@ function nestSiteWords_(site, later) {
     Pole: 'On poles', Water: 'On water', Cactus: 'In cacti' }[site] || site;
   return later ? w.charAt(0).toLowerCase() + w.slice(1) : w;
 }
+
+// ---------- Bird sounds (xeno-canto, via tools/fetch-sounds.js) ----------
+
+/**
+ * One recording, ready to show: a label ("Song · 0:19 · Australia") and its credit, which the
+ * licence requires: the XC number, the recordist and the Creative Commons licence.
+ * @param {Object} r  {id, type, length, rec, cnt, lic, file} from docs/data/sounds.json
+ */
+function soundInfo_(r) {
+  const type = /song/i.test(r.type) ? 'Song' : /call/i.test(r.type) ? 'Call' : 'Sound';
+  const m = String(r.lic || '').match(/licenses\/([a-z-]+)\/([\d.]+)/i);
+  const licence = m ? 'CC ' + m[1].toUpperCase() + ' ' + m[2] : 'see xeno-canto';
+  return {
+    id: String(r.id), type, file: String(r.file),
+    label: [type, r.length, r.cnt].filter(Boolean).join(' · '),
+    credit: 'XC' + r.id + ' by ' + (r.rec || 'unknown') + ', ' + licence,
+    page: 'https://xeno-canto.org/' + encodeURIComponent(r.id), licenceUrl: String(r.lic || ''),
+  };
+}

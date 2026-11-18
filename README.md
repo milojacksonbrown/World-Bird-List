@@ -31,7 +31,8 @@ Life lists are also full of questions that a spreadsheet makes awkward to answer
 - **Where in the world:** a map of countries birded, shaded by the % of the species recorded there (eBird) that you've seen, and bars showing how much of each region's birds you've seen. Click a country to zoom into its states and provinces (counties in the UK, France, Ireland and Indonesia), shaded the same way, with species, lifers and the % of the species eBird has recorded there.
 - **Through the years:** lifers and species by year and by month (for seasonality), with checklists as a guide to how much birding was done.
 - **Latest lifers:** the first time each species was seen, newest first (the latest 10, then 50, 100 or all, with Show fewer at the top and bottom), with a search box and an illustrated sticker of each bird. Where a species has no sticker, a field-guide silhouette of its body shape (heron, wader, owl, finch…) stands in: all 250 AviList families are mapped to one of 32 shapes, and a test checks none is missing.
-- **Test yourself:** a quiz on your own lifers. A sticker appears and you name the bird, choosing from four names or typing it. In *hard* mode the wrong answers are lookalikes from the same family (woodswallows against butcherbirds); typed answers accept any of the bird's names, American spellings, the scientific name, the name without its first word ("Bullfinch") when no other bird has that name, and small spelling slips (one letter in eight). Ten birds a round, with the ones you missed to look at again and your best score kept in your browser.
+- **Bird sounds:** fact files play each bird's song and call, from xeno-canto, credited to their recordists. 10,041 of 11,025 living species (91%) have a recording.
+- **Test yourself:** a quiz on your own lifers, by picture or **by ear** (a song or call plays and you name the bird). For pictures, a sticker appears and you name the bird, choosing from four names or typing it. In *hard* mode the wrong answers are lookalikes from the same family (woodswallows against butcherbirds); typed answers accept any of the bird's names, American spellings, the scientific name, the name without its first word ("Bullfinch") when no other bird has that name, and small spelling slips (one letter in eight). Ten birds a round, with the ones you missed to look at again and your best score kept in your browser.
 - **Your birds around the page:** once your file loads, 25 of your lifers, picked at random each time, appear as stickers around the title, down the margins and by the footer, in fixed places chosen never to cover the text. Click one for its fact file.
 - **Fact files:** click any bird, in the lifer list or an answer, for its fact file: a large illustration, AviList's description of where it lives, a seasonal range map, its IUCN status (colour-coded, green for Least Concern through to red for Critically Endangered), a size comparison (the bird to scale beside a person, or a hand if it's 20 cm or less), size and life history (each fact labelled with its source), your own records, and links to eBird and Bird Album.
 - **Names to check:** every eBird name that doesn't match AviList, with an AI-assisted suggestion you can accept, change or ignore.
@@ -88,6 +89,17 @@ A public website can't contain an API key, because anyone could copy it. So the 
 
 If both models are unavailable or the cap is reached, **the rest of the site keeps working**: string matching still suggests fixes, and only the AI parts pause.
 
+## Bird sounds
+
+Fact files play a bird's song and call, and the quiz can play one for you to name. The recordings are from [xeno-canto](https://xeno-canto.org), the open library where birders share recordings, each under a Creative Commons licence chosen by its recordist.
+
+- **Fetched once, streamed when played.** `tools/fetch-sounds.js` asked xeno-canto's API for every living species' best-rated recordings and kept two (a song and a call, if both exist): 19,818 recordings for 10,041 species, 91% of them. Only the details are saved (`docs/data/sounds.json`: about 500 KB compressed, loaded the first time it's needed); the audio streams from xeno-canto.
+- **The API key never leaves my computer.** xeno-canto's API needs a personal key; the tool asks for it in the terminal without showing it, uses it only while it runs, and never saves it. Like the eBird totals, it's polite (about one request a second, slowing down if asked) and resumable, which mattered: the run took several hours.
+- **Credits as the licences require.** Most recordings are CC BY-NC-SA or BY-NC-ND (non-commercial, fine for this free site). Each player shows the XC number, the recordist and the licence, linked; the 29 recordings returned without a licence are left out. In the sound quiz, the link to the recording (which names the species) only appears after you answer.
+- **A second pass under older names.** AviList 2026 has moved some species to new genera, but xeno-canto still files them under their old names (e.g. *Aerospiza tachiro* is *Accipiter tachiro* there). A second pass (`--other-names`) searched the species that found nothing under their IOC, eBird and BirdLife names, from BIRDBASE, and found recordings for 235 more.
+- **Some birds are deliberately left silent.** Of the 984 species still without a recording, 236 are threatened. xeno-canto restricts recordings of species at risk from trapping or from people playing calls to lure them out, so their sounds aren't freely downloadable: a conservation safeguard the site respects rather than works around. The rest have rarely or never been recorded.
+- **A lesson on handling keys.** The first attempt at loading the key pasted it onto the end of a command, where it showed up in an error message. The tool now asks for the key itself, hidden, so it can't end up in a command or the shell history; a key that has been exposed gets replaced.
+
 ## Stickers and fact files
 
 Every bird has an illustrated sticker from [huashu-bird-sticker](https://github.com/alchaincyf/huashu-bird-sticker) (by Huashu, for the [Bird Album](https://birdalbum.com) guide), which follows AviList v2026 like this site, so the names match exactly: **11,007 of the 11,025 living species** have one. The 18 without are birds AviList flags as possibly extinct.
@@ -121,7 +133,7 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
 
 ## Testing
 
-- **144 automated tests** (`node --test`) cover:
+- **145 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers
@@ -194,6 +206,7 @@ Some things I learned along the way:
 | `AskYourList.gs` | The question tool: allowed tables, prompt, query checker, runner and description (shared) |
 | `Lyrebird/Lyrebird.gs` | The AI middleman web app |
 | `tools/build-traits.js` | Joins AVONET and BIRDBASE to AviList (weight, range, habitat, diet, nests…) and writes the coverage report |
+| `tools/fetch-sounds.js` | Fetches two recordings' details (song and call) per species from xeno-canto, resumably; `--rebuild` rewrites the file from the saved answers |
 | `tools/build-names.js` | Builds one file of bird names per language (45) for the language picker |
 | `tools/build-factfiles.js` | Builds the sticker thumbnails, the sticker index and AviList's range text for the fact files |
 | `docs/js/nest-icons.js` | A line drawing for each of BIRDBASE's nest types (none for "No nest" or "Other bird's nest") |
@@ -225,6 +238,7 @@ Follow the instructions at the top of [`LifeList.gs`](LifeList.gs), or the [setu
 - **Sightings and regional species totals:** [eBird](https://ebird.org) (Cornell Lab of Ornithology). This project isn't affiliated with eBird or AviList.
 - **Map:** country and state/province outlines from [Natural Earth](https://www.naturalearthdata.com/) (public domain), drawn with [Leaflet](https://leafletjs.com/). **Charts:** [Chart.js](https://www.chartjs.org/).
 - **Bird names in other languages:** IOC World Bird List v15.2, multilingual edition (Gill, F., D. Donsker & P. Rasmussen, Eds), CC BY 3.0, via huashu-bird-sticker. One file per language (`tools/build-names.js`), loaded only when chosen.
+- **Bird sounds:** [xeno-canto](https://xeno-canto.org), each recording by its recordist under its Creative Commons licence (credited beside each player).
 - **Range maps:** occurrence records from [GBIF.org](https://www.gbif.org), including eBird, fetched when a fact file opens.
 - **Bird illustrations:** [huashu-bird-sticker](https://github.com/alchaincyf/huashu-bird-sticker) v2.3.6 by Huashu (Bird Album), CC BY 4.0. AI-generated; resized for the icons.
 - **Bird traits:** AVONET (Tobias, J.A. et al. 2022, *Ecology Letters* 25: 581–597, https://doi.org/10.1111/ele.13898) and BIRDBASE v2025.1 (Şekercioğlu, Ç.H. et al. 2025, *Scientific Data*, https://doi.org/10.1038/s41597-025-05615-3), both CC BY 4.0, joined to AviList and converted to a smaller format.
