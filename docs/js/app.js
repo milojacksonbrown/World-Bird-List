@@ -242,11 +242,11 @@
     const dlg = $('#factfile');
     $('#factfile-body').innerHTML = '<p class="working">Opening the fact file…</p>';
     if (!dlg.open) dlg.showModal();
-    const [data, ranges, sounds] = await Promise.all([askTables(), loadRanges(), loadSounds()]);
+    const [data, ranges, sounds, other] = await Promise.all([askTables(), loadRanges(), loadSounds(), loadOtherNames()]);
     const row = data.species.find(r => r.scientific === sp.sci);
     const lifer = current.d.lifers.find(l => l.sci === sp.sci);
     const f = factFile_(sp, row, { lifer, range: ranges[sp.sci] || '', stickers });
-    $('#factfile-body').innerHTML = factFileHtml(f, row, sounds[sp.sci] || []);
+    $('#factfile-body').innerHTML = factFileHtml(f, row, sounds[sp.sci] || [], other.splitFrom[sp.sci]);
     fitFactFileBird(f, row);
     const st = current.d.stats && current.d.stats.species && current.d.stats.species[sp.i];
     drawRangeMap(sp, st && st.points ? [...st.points.values()] : []);
@@ -262,11 +262,26 @@
   const GBIF = 'https://api.gbif.org/';
   const EBIRD_ON_GBIF = '4fa7b334-ce0d-4e88-aaae-2e0c138d049e';     // "EOD – eBird Observation Dataset"
   const gbifKeys = new Map(), rangeCache = new Map();
+  // Some AviList species are under another name on GBIF (renamed, or spelled differently), or are
+  // recent splits GBIF still files under the species they were split from: tools/build-other-names.js
+  let otherNamesLoading = null;
+  const loadOtherNames = () => (otherNamesLoading = otherNamesLoading || fetch('data/other-names.json')
+    .then(r => (r.ok ? r.json() : null)).catch(() => null).then(j => j || { renamed: {}, splitFrom: {} }));
+  /** GBIF's key for one name, by strict match; asked again as a bird if the name is also a plant or insect. */
+  const gbifMatch = name => ['', '&kingdom=Animalia&class=Aves'].reduce((found, extra) => found.then(key => key ||
+    fetch(GBIF + 'v1/species/match?rank=SPECIES&strict=true' + extra + '&name=' + encodeURIComponent(name))
+      .then(r => (r.ok ? r.json() : null))
+      .then(m => (m && m.usageKey && m.rank === 'SPECIES' && m.matchType === 'EXACT' ? m.acceptedUsageKey || m.usageKey : null))), Promise.resolve(null));
+  /** { key, as }: GBIF's key for a species, and the other name it was found under (if any). */
   async function gbifKey(sci) {
     if (!gbifKeys.has(sci)) {
-      gbifKeys.set(sci, fetch(GBIF + 'v1/species/match?rank=SPECIES&strict=true&name=' + encodeURIComponent(sci))
-        .then(r => r.ok ? r.json() : null)
-        .then(m => (m && m.usageKey && m.rank === 'SPECIES' && m.matchType === 'EXACT' ? m.acceptedUsageKey || m.usageKey : null)));
+      gbifKeys.set(sci, (async () => {
+        const key = await gbifMatch(sci);
+        if (key) return { key, as: '' };
+        const other = (await loadOtherNames()).renamed[sci];
+        const otherKey = other ? await gbifMatch(other) : null;
+        return { key: otherKey, as: otherKey ? other : '' };
+      })());
     }
     return gbifKeys.get(sci);
   }
@@ -283,12 +298,12 @@
   }
   function loadRange(sci) {
     if (!rangeCache.has(sci)) {
-      const p = gbifKey(sci).then(async key => {
+      const p = gbifKey(sci).then(async ({ key, as }) => {
         if (!key) return { cells: [], key: null };
         const seasons = dataset => Promise.all([seasonTiles(key, 'month=6,7', dataset), seasonTiles(key, 'month=12&month=1', dataset)]);
         let [june, december] = await seasons(EBIRD_ON_GBIF), ebird = true;
         if (!june.length && !december.length) { [june, december] = await seasons(null); ebird = false; }
-        return { cells: seasonCells_(june, december), key, ebird };
+        return { cells: seasonCells_(june, december), key, ebird, as };
       });
       p.catch(() => rangeCache.delete(sci));              // try again next time
       rangeCache.set(sci, p);
@@ -303,16 +318,35 @@
     const box = $('#ff-map');
     if (!box) return;
     try {
-      const [range, world] = await Promise.all([loadRange(sp.sci), loadWorld()]);
+      const [range, world, other] = await Promise.all([loadRange(sp.sci), loadWorld(), loadOtherNames()]);
       if ($('#ff-map') !== box) return;                      // another bird was opened meanwhile
-      if (!range.cells.length && !sightings.length) { box.innerHTML = '<p class="ai-note">No mapped records for this species on GBIF.</p>'; return; }
+      // A recent split: GBIF still files its records under the species it was split from
+      const parent = !range.cells.length && other.splitFrom[sp.sci];
+      const parentSp = parent && checklist.species[checklist.bySci.get(parent.toLowerCase())];
+      const splitNote = parent ? 'No range map yet: this species was recently split from ' +
+        (parentSp ? esc(parentSp.common) + ' (<i>' + esc(parent) + '</i>)' : '<i>' + esc(parent) + '</i>') +
+        ', and GBIF still files its records under that species.' : '';
+      if (!range.cells.length && !sightings.length) {
+        box.innerHTML = '<p class="ai-note">' + (splitNote || 'No mapped records for this species on GBIF.') + '</p>';
+        return;
+      }
       box.innerHTML = rangeMapSvg_(range.cells, world, sightings);
-      if (range.key) $('#ff-map-credit').innerHTML = (range.ebird ? 'eBird records' : 'Records (none from eBird, so from all sources)') +
-        ', via <a href="https://www.gbif.org/species/' + range.key + '">GBIF.org</a>. ' +
+      if (splitNote) $('#ff-map-credit').innerHTML = splitNote + ' Only your own sightings are shown.';
+      else if (range.key) $('#ff-map-credit').innerHTML = (range.ebird ? 'eBird records' : 'Records (none from eBird, so from all sources)') +
+        ', via <a href="https://www.gbif.org/species/' + range.key + '">GBIF.org</a>' +
+        (range.as ? ', where it\'s listed as <i>' + esc(range.as) + '</i>' : '') + '. ' +
         'June–July is summer in the north and winter in the south.';
     } catch (e) {
       if ($('#ff-map') === box) box.innerHTML = '<p class="ai-note">The map couldn\'t be loaded just now (' + esc(e.message) + ').</p>';
     }
+  }
+
+  /** For a recent split with no measurements of its own: why, in place of a gap. */
+  function splitSizeNote(f, parent) {
+    if (!parent || f.size.some(x => x.label === 'Wing length')) return '';
+    const p = checklist.species[checklist.bySci.get(parent.toLowerCase())];
+    return '<p class="ai-note">' + (f.size.length ? 'No measurements' : 'No size facts') + ' of its own yet: it was recently split from ' +
+      (p ? esc(p.common) : '<i>' + esc(parent) + '</i>') + ', and the published datasets still measure them together.</p>';
   }
 
   /** Nest types, each with its drawing (nest-icons.js) where it has one. */
@@ -394,7 +428,7 @@
     }
   }
 
-  function factFileHtml(f, row, recordings) {
+  function factFileHtml(f, row, recordings, splitFrom) {
     const list = (title, facts) => facts.length ? '<section class="ff-block"><h3>' + esc(title) + '</h3><dl>' +
       facts.map(x => '<div><dt>' + esc(x.label) + '</dt><dd>' +
         (x.label === 'Main habitat' && HABITAT_ICONS_[x.value] ? '<span class="icon habitat">' + habitatIconSvg_(x.value, 20) + '</span>' + esc(x.value)
@@ -435,7 +469,7 @@
         '<ul class="ff-legend"><li><span class="sw june"></span>Recorded in June–July</li><li><span class="sw december"></span>December–January</li>' +
         '<li><span class="sw both"></span>Year-round</li>' + (f.seen ? '<li><span class="sw mine"></span>Your sightings</li>' : '') + '</ul>' +
         '<p id="ff-map-credit" class="ff-credit"></p></section>' +
-      '<div class="ff-grid"><div>' + list('Size', f.size) + sizeComparison(f, row) + '</div>' + list('Life', f.life) + '</div>' +
+      '<div class="ff-grid"><div>' + list('Size', f.size) + splitSizeNote(f, splitFrom) + sizeComparison(f, row) + '</div>' + list('Life', f.life) + '</div>' +
       ((recordings || []).length ? '<section class="ff-block ff-sounds"><h3>Sounds</h3><div class="sounds">' + recordings.map(soundPlayer).join('') + '</div>' +
         '<p class="ff-credit">Recordings from <a href="https://xeno-canto.org">xeno-canto</a>, shared by their recordists.</p></section>' : '') +
       records +

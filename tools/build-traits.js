@@ -23,6 +23,10 @@
 // which lists each species' BirdLife, eBird and AviList names side by side.
 // Range size is kept only when exactly one AviList species matches an AVONET
 // row: after a split, the old range covers several species, so it would be too big.
+// Last of all, it tries the other name in docs/data/other-names.json (made by
+// tools/build-other-names.js): AviList 2026's renamings and spelling differences
+// that BIRDBASE, made for AviList 2025, doesn't know yet (Cape Bunting, now
+// Fringillaria capensis, is Emberiza capensis in AVONET).
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -65,6 +69,8 @@ function build() {
   }
   const avilist = JSON.parse(fs.readFileSync(path.join(root, 'docs/data/avilist.json'), 'utf8'));
   const species = avilist.species.map(r => ({ sci: r[0], common: r[1], extinct: r[7] === 1 }));
+  const otherFile = path.join(root, 'docs/data/other-names.json');
+  const renamed = fs.existsSync(otherFile) ? JSON.parse(fs.readFileSync(otherFile, 'utf8')).renamed : {};
 
   console.log('Reading AVONET…');
   const av1 = table(AVONET_FILE, 'AVONET1_BirdLife');            // BirdLife names; has range size
@@ -87,6 +93,8 @@ function build() {
     const k = key(s.sci);
     let b = bbByAvilist.get(k), bHow = 'AviList name';
     if (!b) { b = bbByAny.get(k); bHow = 'other name'; }
+    const alt = renamed[s.sci] ? key(renamed[s.sci]) : '';
+    if (!b && alt) { b = bbByAny.get(alt); bHow = 'other name'; }
     if (!b) bHow = 'none';
     tally(how.bb, bHow);
 
@@ -97,6 +105,8 @@ function build() {
       [av1By, b && key(b[BB_NAMES.latin]), 'BirdLife sheet, via BIRDBASE'],
       [av2By, k, 'eBird sheet, same name'],
       [av2By, b && key(b[BB_NAMES.ebird]), 'eBird sheet, via BIRDBASE'],
+      [av1By, alt, 'BirdLife sheet, via other-names.json'],
+      [av2By, alt, 'eBird sheet, via other-names.json'],
     ];
     for (const [map, name, label] of tries) {
       if (name && map.has(name)) { a = map.get(name); aHow = label; break; }

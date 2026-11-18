@@ -233,3 +233,23 @@ test('Explore: recent sightings become the species you haven\'t seen, by family'
   assert.deepEqual(r.families[1].birds[0], { i: idx('Pyrrhula pyrrhula'), sci: 'Pyrrhula pyrrhula', common: 'Eurasian Bullfinch', date: '2026-11-16', loc: '' });
   assert.equal(plain(run('exploreList_(null, CLX, SEEN)')).total, 0);
 });
+
+test('other-names.json: other names GBIF uses, for AviList species it doesn\'t know by name', () => {
+  const avilist = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'data', 'avilist.json'), 'utf8'));
+  const other = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'data', 'other-names.json'), 'utf8'));
+  const living = new Set(avilist.species.filter(s => !s[7]).map(s => s[0]));
+  const all = new Set(avilist.species.map(s => s[0]));
+  for (const [sci, alt] of Object.entries(other.renamed)) {
+    assert.ok(living.has(sci), sci + ' is a living AviList species');
+    assert.ok(!all.has(alt), alt + ' (for ' + sci + ') is not another AviList species\' name');
+  }
+  for (const sci of Object.keys(other.splitFrom)) {
+    assert.ok(living.has(sci), sci + ' is a living AviList species');
+    assert.ok(!(sci in other.renamed), sci + ' is a renaming or a split, not both');
+  }
+  // The examples that found the problem
+  assert.equal(other.renamed['Trichoglossus concinnus'], 'Glossopsitta concinna');   // Musk Lorikeet
+  assert.equal(other.splitFrom['Butorides atricapilla'], 'Butorides striata');       // Little Heron, from Striated Heron
+  assert.equal(other.renamed['Fringillaria capensis'], 'Emberiza capensis');         // Cape Bunting, moved genus
+  assert.equal(other.renamed['Strigops habroptilus'], 'Strigops habroptila');        // Kakapo, spelled differently
+});
