@@ -55,7 +55,7 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
 test('opening the web address shows it is running, without revealing the key', () => {
   const { run } = setup();
   const text = run('doGet')().text;
-  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-19 (answers remembered)', actions: ['nameFix', 'query', 'recent'], usedToday: 0, dailyCap: 200 });
+  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-19 (shared with the Worker)', actions: ['nameFix', 'query', 'recent'], usedToday: 0, dailyCap: 200 });
   assert.ok(!text.includes(KEY));
 });
 

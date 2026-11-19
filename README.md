@@ -85,7 +85,16 @@ A table of families, plus: "Understood as: Families where % seen is under 10%, l
 
 ### Lyrebird: keeping the API key secret
 
-A public website can't contain an API key, because anyone could copy it. So the site talks to **Lyrebird**, a small Google Apps Script web app I run. Lyrebird holds the API keys, accepts only two kinds of request with strict size limits, checks the AI's answers, and has a **daily cap** of 200 AI calls shared by everyone. It stores nothing except that day's count. (It's named after the bird that passes on sounds it has heard.)
+A public website can't contain an API key, because anyone could copy it. So the site talks to **Lyrebird**, a small Google Apps Script web app I run. Lyrebird holds the API keys, accepts only three kinds of request with strict size limits, checks the AI's answers, and has a **daily cap** of 200 AI calls shared by everyone. It stores nothing except that day's count. (It's named after the bird that passes on sounds it has heard.)
+
+**Two homes: Cloudflare first, Google as the backup.** Timing showed most of Lyrebird's wait wasn't the AI but Google Apps Script itself: 1.5 to 13 seconds just to reply, even for a remembered answer. So Lyrebird now also runs as a [Cloudflare Worker](worker/README.md), on Cloudflare's network near whoever is using the site, and the site asks it first. Only the plumbing moved: every rule (request checks, prompts, answer checks, replies, caps, model fallback) is the same code, bundled unchanged from the Apps Script files, so both answer identically. Keys are Cloudflare secrets; the daily counts and remembered answers live in D1, Cloudflare's small SQL database, where one statement checks and counts so two requests can't both take the last call. If the Worker can't be reached or can't reach the AI, the site quietly asks the Apps Script Lyrebird instead.
+
+| Measured live | Apps Script | Cloudflare Worker |
+| --- | --- | --- |
+| Status page | 1.5–2 s | 0.26 s |
+| A remembered question (no AI) | 2–13 s | 0.2–0.25 s |
+| A new question (Groq answering) | about 4 s | about 1.9 s |
+| Explore, a new place | a few seconds | about 1 s; 0.36 s remembered |
 
 **Two AI companies, one fallback.** Lyrebird asks OpenAI's open GPT-OSS 120B model, run free by [Groq](https://groq.com), first. If Groq is out of quota or down, it asks Google's Gemini 3 Flash instead. Each company has its own key, quota and servers, so one failing doesn't take the AI down. The order is a single setting in Lyrebird (`AI_MODELS`), every model's answers go through exactly the same checks, and the site says when a backup answered.
 
@@ -163,11 +172,12 @@ A small tool (`tools/build-traits.js`) joins them to AviList and writes one comp
 
 ## Testing
 
-- **151 automated tests** (`node --test`) cover:
+- **169 automated tests** (`node --test`) cover:
   - the AviList conversion and name matching
   - the confidence rules
   - the dashboard's numbers
   - Lyrebird's request checks, run against fake Google services, so no real key or internet is needed
+  - Lyrebird on Cloudflare Workers: the same replies as Apps Script, Groq first and Gemini as backup, the shortlist rule, the daily cap and the new-day tidy-up (with Node's own SQLite standing in for D1, so the real SQL runs), remembered answers, Explore's privacy rule, other websites refused, and the bundle kept up to date
   - the query checker, which has to reject unknown tables and fields, the wrong value types, and tampered replies
   - the fact files: every fact labelled with its source, unknown facts left out, made-up checklist IDs not linked, and a thumbnail present for every species with a sticker
   - the range map: reading GBIF's vector tiles (from a tile built by hand in the test), grid cells, the projection, sorting by season (a few off-season records don't make a cell year-round), leaving out strays, and framing
@@ -235,7 +245,9 @@ Some things I learned along the way:
 | `LifeList.gs` | The Google Sheets version: builds the tabs, reads eBird data, matches names, runs daily |
 | `NameFixesAssistant.gs` | Name matching, shortlist, confidence rules and the AI call to Groq or Google (shared by the sheet, Lyrebird and the website) |
 | `AskYourList.gs` | The question tool: allowed tables, prompt, query checker, runner and description (shared) |
-| `Lyrebird/Lyrebird.gs` | The AI middleman web app |
+| `Lyrebird/Lyrebird.gs` | The AI middleman web app (Apps Script; now the backup) |
+| `worker/` | The same Lyrebird on Cloudflare Workers (the site's first choice): `main.js`, settings, and how to deploy |
+| `tools/build-worker.js` | Bundles the shared Apps Script code with `worker/main.js` into `worker/dist/lyrebird.js` |
 | `tools/build-traits.js` | Joins AVONET and BIRDBASE to AviList (weight, range, habitat, diet, nests…) and writes the coverage report |
 | `tools/build-explore-regions.js` | Every country, state and county with its eBird code, for Explore's place picker |
 | `tools/build-other-names.js` | The names GBIF uses for AviList species it doesn't know by name (renamings, spellings) and the species recent splits are still filed under, for range maps and traits |

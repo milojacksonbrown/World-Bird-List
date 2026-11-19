@@ -488,12 +488,64 @@ function askAi_(prompt, key, schema) {
     const r = provider === 'groq' ? fetchGroq_(models[i].replace(/^groq:/i, ''), prompt, schema)
       : fetchGemini_(models[i], prompt, key, schema);
     if (r.ok) return { text: r.text, model: models[i], backup: i > 0 };
-    if (failure) failure.message += '; then ' + models[i] + ': ' + r.error.message;
-    else failure = new Error(models.length > 1 ? models[i] + ': ' + r.error.message : r.error.message);
-    const next = models[i + 1];
-    if (!next || !shouldFallBack_(r.code, aiProvider_(next), provider)) break;
+    failure = aiFailure_(failure, models, i, r);
+    if (!aiTryNext_(models, i, r)) break;
   }
   throw failure;
+}
+
+// ---------------------------------------------------------------------------
+//  The rules for talking to an AI model, shared with the Cloudflare Worker
+//  version of Lyrebird (worker/): what to send to each model, how to read its
+//  reply, and when to try the next one. Pure: only the sending differs
+//  (UrlFetchApp here, fetch in the Worker), so both follow exactly the same rules.
+// ---------------------------------------------------------------------------
+
+/**
+ * The request for one model: its address, headers and body, or a problem (no key for it).
+ * @param {{google:string, groq:string}} keys
+ * @return {{url:string, headers:Object, body:Object}|{problem:{ok:false, code:number, error:Error}}}
+ */
+function aiRequest_(model, prompt, schema, keys) {
+  if (aiProvider_(model) === 'groq') {
+    if (!keys.groq) return { problem: { ok: false, code: 401, error: new Error('no GROQ_API_KEY in Script Properties') } };
+    return { url: 'https://api.groq.com/openai/v1/chat/completions',
+      headers: { Authorization: 'Bearer ' + keys.groq },          // in a header, never the URL
+      body: groqRequestBody_(prompt, model.replace(/^groq:/i, ''), schema) };
+  }
+  return { url: 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent',
+    headers: { 'x-goog-api-key': keys.google },                 // in a header, not the URL, so it never shows in errors or logs
+    body: geminiRequestBody_(prompt, model, schema) };
+}
+
+/**
+ * Reads one model's HTTP reply: { ok: true, code, text } or { ok: false, code, error }.
+ * An HTTP error is returned, not thrown, so the next model can be tried.
+ */
+function aiReply_(model, code, text) {
+  const groq = aiProvider_(model) === 'groq';
+  if (code === 200) {
+    if (!groq) return { ok: true, code, text: readGeminiText_(JSON.parse(text)) };
+    const msg = ((JSON.parse(text).choices || [])[0] || {}).message || {};
+    if (!msg.content) return { ok: false, code: 502, error: new Error('empty answer from Groq') };
+    return { ok: true, code, text: msg.content };
+  }
+  if (code === 429) return { ok: false, code, error: new Error(groq ? 'Groq free-tier limit reached, try again later' : 'free-tier limit reached, try again later') };
+  let detail = '';
+  try { detail = JSON.parse(text).error.message; } catch (e) { }
+  return { ok: false, code, error: new Error((groq ? 'Groq error ' : 'Gemini error ') + code + (detail ? ': ' + String(detail).slice(0, 300) : '')) };
+}
+
+/** The failure so far, with this model's error added ("model: error; then model: error"). */
+function aiFailure_(failure, models, i, r) {
+  if (failure) { failure.message += '; then ' + models[i] + ': ' + r.error.message; return failure; }
+  return new Error(models.length > 1 ? models[i] + ': ' + r.error.message : r.error.message);
+}
+
+/** Whether to try the model after models[i], given how this one failed (shouldFallBack_). */
+function aiTryNext_(models, i, r) {
+  const next = models[i + 1];
+  return !!next && shouldFallBack_(r.code, aiProvider_(next), aiProvider_(models[i]));
 }
 
 /** Older name, kept for the tests and anything that still calls it. */
@@ -532,45 +584,28 @@ function groqRequestBody_(prompt, model, schema) {
   return body;
 }
 
-/** One request to a Groq model. Never throws for an HTTP error: returns it instead. */
+/** One request to a Groq model, sent by Apps Script. Never throws for an HTTP error: returns it instead. */
 function fetchGroq_(model, prompt, schema) {
-  const key = PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY');
-  if (!key) return { ok: false, code: 401, error: new Error('no GROQ_API_KEY in Script Properties') };
-  const res = UrlFetchApp.fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { Authorization: 'Bearer ' + key },   // in a header, never the URL
-    payload: JSON.stringify(groqRequestBody_(prompt, model, schema)),
-    muteHttpExceptions: true,
-  });
-  const code = res.getResponseCode();
-  if (code === 200) {
-    const msg = ((JSON.parse(res.getContentText()).choices || [])[0] || {}).message || {};
-    if (!msg.content) return { ok: false, code: 502, error: new Error('empty answer from Groq') };
-    return { ok: true, code, text: msg.content };
-  }
-  if (code === 429) return { ok: false, code, error: new Error('Groq free-tier limit reached, try again later') };
-  let detail = '';
-  try { detail = JSON.parse(res.getContentText()).error.message; } catch (e) { }
-  return { ok: false, code, error: new Error('Groq error ' + code + (detail ? ': ' + String(detail).slice(0, 300) : '')) };
+  return sendAi_('groq:' + model, prompt, schema, { groq: PropertiesService.getScriptProperties().getProperty('GROQ_API_KEY') });
 }
 
-/** One request to one model. Never throws for an HTTP error: returns it instead. */
+/** One request to one Google model, sent by Apps Script. Never throws for an HTTP error: returns it instead. */
 function fetchGemini_(model, prompt, key, schema) {
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent';
-  const res = UrlFetchApp.fetch(url, {
+  return sendAi_(model, prompt, schema, { google: key });
+}
+
+/** Sends aiRequest_'s request with UrlFetchApp and reads the reply with aiReply_. */
+function sendAi_(model, prompt, schema, keys) {
+  const req = aiRequest_(model, prompt, schema, keys);
+  if (req.problem) return req.problem;
+  const res = UrlFetchApp.fetch(req.url, {
     method: 'post',
     contentType: 'application/json',
-    headers: { 'x-goog-api-key': key },   // in a header, not the URL, so it never shows in errors or logs
-    payload: JSON.stringify(geminiRequestBody_(prompt, model, schema)),
+    headers: req.headers,
+    payload: JSON.stringify(req.body),
     muteHttpExceptions: true,
   });
-  const code = res.getResponseCode();
-  if (code === 200) return { ok: true, code, text: readGeminiText_(JSON.parse(res.getContentText())) };
-  if (code === 429) return { ok: false, code, error: new Error('free-tier limit reached, try again later') };
-  let detail = '';
-  try { detail = JSON.parse(res.getContentText()).error.message; } catch (e) { }
-  return { ok: false, code, error: new Error('Gemini error ' + code + (detail ? ': ' + String(detail).slice(0, 300) : '')) };
+  return aiReply_(model, res.getResponseCode(), res.getContentText());
 }
 
 /** Adds the Suggested species / Confidence / Reason / Accept headers if missing. */

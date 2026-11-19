@@ -5,3 +5,6 @@
 private/
 Documents/ebird_*.zip
 Documents/MyEBirdData*.csv
+
+# Cloudflare wrangler's local working files (worker/)
+.wrangler/

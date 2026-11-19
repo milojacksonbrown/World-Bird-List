@@ -1,0 +1,16 @@
+# Cloudflare's settings for Lyrebird on Workers (deployed with: npx wrangler@4 deploy, from this folder).
+# Nothing secret here: the API keys are stored by Cloudflare as secrets (npx wrangler@4 secret put …).
+
+name = "lyrebird"
+main = "dist/lyrebird.js"          # built by: node tools/build-worker.js
+compatibility_date = "2025-11-01"
+
+[vars]
+# The AI models to try, in order (the same as Script Property AI_MODELS in Apps Script)
+AI_MODELS = "groq:openai/gpt-oss-120b, gemini-3-flash-preview"
+
+# The small database that holds the daily counts and remembered answers
+[[d1_databases]]
+binding = "DB"
+database_name = "lyrebird"
+database_id = "5c032f94-337b-46a2-a45c-329ddf14e7e7"

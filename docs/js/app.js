@@ -281,7 +281,8 @@
     warmedUp = true;
     const later = window.requestIdleCallback ? f => requestIdleCallback(f, { timeout: 4000 }) : f => setTimeout(f, 2000);
     later(() => {
-      if (LYREBIRD_URL) fetch(LYREBIRD_URL, { mode: 'no-cors' }).catch(() => {});
+      // (Only Apps Script needs waking; the Cloudflare Worker, when there is one, answers straight away.)
+      if (LYREBIRD_URL && !LYREBIRD_FAST_URL) fetch(LYREBIRD_URL, { mode: 'no-cors' }).catch(() => {});
       askTables().catch(() => {});
       loadOtherNames(); loadRanges(); loadSounds();
       loadWorld().catch(() => {});
@@ -924,11 +925,26 @@
 
   /** Sends a request to Lyrebird, the AI middleman. Throws if it can't be reached. */
   async function askLyrebird(payload) {
-    if (!LYREBIRD_URL) throw new Error('the AI isn\'t set up on this site yet');
-    // text/plain keeps this a "simple" request, which Apps Script web apps accept from other websites
-    const res = await fetch(LYREBIRD_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error('the AI service replied with an error (HTTP ' + res.status + ')');
-    return res.json();
+    // The fast Lyrebird (Cloudflare Worker) first, then the Apps Script one if the first can't be
+    // reached, replies with an error, or couldn't reach the AI (two places, so one failing isn't fatal).
+    // A real answer, including "today's limit is reached" or "not a valid question", is final.
+    const urls = [LYREBIRD_FAST_URL, LYREBIRD_URL].filter(Boolean);
+    if (!urls.length) throw new Error('the AI isn\'t set up on this site yet');
+    let problem = null;
+    for (const url of urls) {
+      try {
+        // text/plain keeps this a "simple" request, which both accept from other websites
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error('the AI service replied with an error (HTTP ' + res.status + ')');
+        const reply = await res.json();
+        if (reply.ok === false && ['ai-unavailable', 'not-configured', 'ebird-unavailable'].includes(reply.error) && url !== urls.at(-1)) {
+          problem = new Error(reply.message || reply.error);
+          continue;                                    // the other Lyrebird may manage it
+        }
+        return reply;
+      } catch (e) { problem = e; }
+    }
+    throw problem;
   }
 
   // Shown when Lyrebird's first-choice model was out of quota or busy and a backup answered

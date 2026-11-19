@@ -47,7 +47,7 @@
 const LYREBIRD = {
   // Shown when the web address is opened, so you can tell which code is live.
   // Change it whenever you publish a new version.
-  VERSION: '2026-11-19 (answers remembered)',
+  VERSION: '2026-11-19 (shared with the Worker)',
   DAILY_CAP: 200,          // Gemini calls per day, for everyone together
   MAX_TEXT: 120,           // longest name accepted, in characters
   MAX_SHORTLIST: 20,       // most candidates accepted
@@ -109,21 +109,11 @@ function doPost(e) {
     // Both jobs say which model answered: the main one, or the backup (Gemma)
     // if the main one was out of quota or busy. See askAi_.
     if (req.action === 'query') {
-      const ai = askAi_(buildQueryPrompt_(req.question, new Date()), key, queryResponseSchema_());
-      const ans = readQueryAnswer_(ai.text);
-      if (ans.status !== 'query') return json_({ ok: true, status: ans.status, reason: ans.reason, model: ai.model, backup: ai.backup });
-      const reply = { ok: true, status: 'query', query: ans.query, reason: ans.reason, model: ai.model, backup: ai.backup };
-      rememberQuery_(req.question, new Date(), reply);
+      const reply = queryReply_(askAi_(buildQueryPrompt_(req.question, new Date()), key, queryResponseSchema_()));
+      if (reply.status === 'query') rememberQuery_(req.question, new Date(), reply);
       return json_(reply);
     }
-    // nameFix
-    const ai = askAi_(buildAiPrompt_(req.ebird, req.shortlist), key);
-    const ans = parseAiAnswer_(ai.text, req.shortlist);
-    // The candidate's number (1 = first). Worked out here too, so an older copy of
-    // NameFixesAssistant.gs (whose answers don't include it) still gives the right number.
-    const choice = ans.status !== 'pick' ? 0
-      : (ans.choice || req.shortlist.findIndex(c => c.sci === ans.pick.sci) + 1);
-    return json_({ ok: true, status: ans.status, choice, reason: ans.reason, model: ai.model, backup: ai.backup });
+    return json_(nameFixReply_(askAi_(buildAiPrompt_(req.ebird, req.shortlist), key), req));
   } catch (err) {
     return json_({ ok: false, error: 'ai-unavailable', message: String(err.message || err).slice(0, 200) });
   }
@@ -188,18 +178,54 @@ function recentSightings_(region) {
   if (!takeFromDailyAllowance_('RECENT_', LYREBIRD.RECENT_CAP)) {
     return { ok: false, error: 'limit', message: 'Explore has reached its limit for today. Please try again tomorrow.' };
   }
-  const url = 'https://api.ebird.org/v2/data/obs/' + encodeURIComponent(region) + '/recent?back=' + LYREBIRD.RECENT_DAYS + '&cat=species';
+  const url = recentUrl_(region);
   const res = UrlFetchApp.fetch(url, { headers: { 'X-eBirdApiToken': key }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) return { ok: false, error: 'ebird-unavailable', message: 'eBird answered ' + res.getResponseCode() + '.' };
+  const out = recentReply_(region, JSON.parse(res.getContentText()));
+  try { cache.put('recent:' + region, JSON.stringify(out), LYREBIRD.RECENT_CACHE_S); } catch (e) { /* too big to remember: fine */ }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+//  Replies, shared with the Cloudflare Worker version of Lyrebird (worker/),
+//  so both answer in exactly the same way. Pure: plain values in and out.
+// ---------------------------------------------------------------------------
+
+/** The reply to a question, from the AI's answer ({text, model, backup}), checked by readQueryAnswer_. */
+function queryReply_(ai) {
+  const ans = readQueryAnswer_(ai.text);
+  return ans.status === 'query'
+    ? { ok: true, status: 'query', query: ans.query, reason: ans.reason, model: ai.model, backup: ai.backup }
+    : { ok: true, status: ans.status, reason: ans.reason, model: ai.model, backup: ai.backup };
+}
+
+/** The reply to a name fix, from the AI's answer, checked against the shortlist by parseAiAnswer_. */
+function nameFixReply_(ai, req) {
+  const ans = parseAiAnswer_(ai.text, req.shortlist);
+  // The candidate's number (1 = first). Worked out here too, so an older copy of
+  // NameFixesAssistant.gs (whose answers don't include it) still gives the right number.
+  const choice = ans.status !== 'pick' ? 0
+    : (ans.choice || req.shortlist.findIndex(c => c.sci === ans.pick.sci) + 1);
+  return { ok: true, status: ans.status, choice, reason: ans.reason, model: ai.model, backup: ai.backup };
+}
+
+/** eBird's address for a region's recent sightings (the key goes in a header, never here). */
+function recentUrl_(region) {
+  return 'https://api.ebird.org/v2/data/obs/' + encodeURIComponent(region) + '/recent?back=' + LYREBIRD.RECENT_DAYS + '&cat=species';
+}
+
+/**
+ * Explore's reply from eBird's list of sightings: one entry per species (code, last date, and the
+ * place, unless eBird marks it private), so only what the website needs is passed on.
+ */
+function recentReply_(region, sightings) {
   const seen = new Set(), species = [];
-  JSON.parse(res.getContentText()).forEach(o => {
+  (sightings || []).forEach(o => {
     if (!o || !o.speciesCode || seen.has(o.speciesCode)) return;
     seen.add(o.speciesCode);
     species.push({ code: String(o.speciesCode), date: String(o.obsDt || '').slice(0, 10), loc: o.locationPrivate ? '' : String(o.locName || '').slice(0, 120) });
   });
-  const out = { ok: true, region, days: LYREBIRD.RECENT_DAYS, species };
-  try { cache.put('recent:' + region, JSON.stringify(out), LYREBIRD.RECENT_CACHE_S); } catch (e) { /* too big to remember: fine */ }
-  return out;
+  return { ok: true, region, days: LYREBIRD.RECENT_DAYS, species };
 }
 
 /** Today's date as the key for the daily count, e.g. "2026-11-11" (UTC). */
