@@ -92,13 +92,14 @@
 
     <section id="world-plate" class="plate" aria-labelledby="world-title">
       <h2 id="world-title">Where in the world</h2>
-      <p class="caption">The countries you've birded in, shaded by the share of the species ever recorded there (eBird) that you've seen. The bars show how many of the birds regularly found in each region (breeding, wintering or on migration) you've seen, wherever you saw them. Rare vagrants aren't included. Tap or hover over a country for details, and click a birded country to see its states and provinces.</p>
+      <p class="caption">Each country you've birded in is shaded by how much of its birdlife you've seen, out of all the species ever recorded there on eBird. Hover over or tap a country for details, and click it to see its states and provinces.</p>
+      <p class="caption">The bars show, for each region of the world, how many of the birds that live there or pass through you've seen, wherever you saw them. Rare vagrants are left out.</p>
       <div class="world">
         <div class="map-wrap">
           <div id="map" class="map" role="img" aria-label="World map of the countries birded in, shaded by the number of species recorded in each. Region figures are listed beside it."></div>
           <div id="map-legend" class="map-legend"></div>
           <div id="map-countries" class="map-countries"></div>
-          <p class="map-note">For the region figures, each country belongs to one region; countries spanning two (Russia, Egypt, Indonesia) go by continent.</p>
+          <p class="map-note">In the region bars, each country counts towards one region. Russia, Egypt and Indonesia, which span two, are placed by continent.</p>
         </div>
         <ul id="region-bars" class="region-bars"></ul>
       </div>
@@ -106,8 +107,8 @@
 
     <section id="years-plate" class="plate" aria-labelledby="years-title">
       <h2 id="years-title">Through the years</h2>
-      <p class="caption">New species by year, and by month of the year to show the seasons (every year counted together).
-        Below: every species recorded, lifer or not, with the number of checklists as a guide to how much birding was done.</p>
+      <p class="caption">The top charts show your lifers each year, and in each month of the year (all years together), so the seasons stand out.
+        The bottom charts count every species you recorded, lifer or not, with a line for your checklists as a guide to how much birding you did.</p>
       <div class="charts">
         <figure class="chart"><figcaption>Lifers per year</figcaption><div class="chart-box"><canvas id="chart-years" role="img" aria-label="Bar chart of lifers per year"></canvas></div></figure>
         <figure class="chart"><figcaption>Lifers per month</figcaption><div class="chart-box"><canvas id="chart-months" role="img" aria-label="Bar chart of lifers per month of the year"></canvas></div></figure>
@@ -118,7 +119,7 @@
 
     <section id="lifers-plate" class="plate" aria-labelledby="lifers-title">
       <h2 id="lifers-title">Latest lifers</h2>
-      <p class="caption">The first time each species was recorded, newest first. Search to find any of them, and click a bird for its fact file.</p>
+      <p class="caption">Every species you've seen, newest lifer first. Search for a bird, or click any of them to open its fact file.</p>
       <div class="lifer-tools">
         <label class="lifer-search">Search your lifers
           <input id="lifer-search" type="search" autocomplete="off" placeholder="e.g. plover, Corvus or herons">
@@ -133,7 +134,7 @@
 
     <section id="ask-plate" class="plate" aria-labelledby="ask-title">
       <h2 id="ask-title">Ask your list</h2>
-      <p class="caption">Ask a question in plain English. The answer comes from your own data, and you're shown how the question was understood.</p>
+      <p class="caption">Ask a question in plain English. The answer comes from your own records, and you'll see exactly how your question was understood.</p>
       <form id="ask-form" class="ask-form">
         <label for="ask-input" class="visually-hidden">Your question</label>
         <input id="ask-input" type="text" maxlength="300" autocomplete="off" placeholder="e.g. What waterfowl have I seen?">
@@ -147,15 +148,15 @@
         <button type="button" class="chip">Which birds have I seen in North Yorkshire, England?</button>
         <button type="button" class="chip">Which of my birds have the longest wings?</button>
       </div>
-      <p class="ai-note">Your question (and nothing else) goes through Lyrebird to an AI model (OpenAI's GPT-OSS on Groq, or Google's
-        Gemini as a backup), which turns it into a search. The search is checked against what's allowed, then run here in your browser.
-        Your data never leaves it. (Free AI services may keep what's sent, so don't include anything personal.)</p>
+      <p class="ai-note">Only your question is sent: through Lyrebird to an AI model (OpenAI's GPT-OSS on Groq, with Google's Gemini as
+        a backup), which turns it into a search. The search is checked against what's allowed, then run here in your browser, so your
+        data never leaves it. Free AI services may keep what they're sent, so leave out anything personal.</p>
       <div id="ask-result" class="ask-result" aria-live="polite"></div>
     </section>
 
     <section id="quiz-plate" class="plate" aria-labelledby="quiz-title">
       <h2 id="quiz-title">Test yourself</h2>
-      <p class="caption">Can you name your own lifers from a picture, or by ear? Ten birds a round.</p>
+      <p class="caption">How well do you know your own lifers? Name ten of them, from a picture or by ear.</p>
       <div id="quiz-setup" class="quiz-setup">
         <fieldset class="quiz-choice">
           <legend>Name it by</legend>
@@ -169,27 +170,28 @@
         </fieldset>
         <fieldset class="quiz-choice" id="quiz-level">
           <legend>Difficulty</legend>
-          <label><input type="radio" name="quiz-level" value="easy" checked> Easy: the other names are any of your lifers</label>
-          <label><input type="radio" name="quiz-level" value="hard"> Hard: the other names are lookalikes from the same family</label>
+          <label><input type="radio" name="quiz-level" value="easy" checked> Easy: the wrong answers are any of your lifers</label>
+          <label><input type="radio" name="quiz-level" value="hard"> Hard: the wrong answers are lookalikes from the same family</label>
         </fieldset>
         <div class="quiz-about">
-          <label for="quiz-about">Quiz me on <span class="quiz-optional">(optional: leave empty for all your lifers)</span></label>
+          <label for="quiz-about">Quiz me on <span class="quiz-optional">(optional: leave blank for all your lifers)</span></label>
           <input id="quiz-about" type="text" maxlength="200" autocomplete="off" placeholder="e.g. birds I saw in Thailand, my 2025 lifers, owls, threatened birds">
         </div>
         <button id="quiz-start" type="button" class="button primary">Start a round</button>
         <p id="quiz-best" class="ai-note"></p>
       </div>
       <div id="quiz-game" class="quiz-game" hidden></div>
-      <p class="ai-note quiz-small">The pictures are AI illustrations (huashu-bird-sticker) and a few may not look exactly like the bird.
-        Typed answers can use any of the bird's names, with or without capitals, and small spelling slips are forgiven.
-        Recordings are from <a href="https://xeno-canto.org">xeno-canto</a>, each credited to its recordist.
-        A "Quiz me on" request (and nothing else) goes through Lyrebird to an AI model, as in Ask your list, which turns it into a checked search of your lifers.</p>
+      <p class="ai-note quiz-small">The pictures are AI illustrations (from huashu-bird-sticker), so a few may not match the bird exactly.
+        Typed answers can use any of the bird's names; capitals don't matter, and small spelling slips are forgiven.
+        Recordings come from <a href="https://xeno-canto.org">xeno-canto</a>, each credited to its recordist.
+        "Quiz me on" works like Ask your list: only your request is sent, through Lyrebird to an AI model, which turns it into a checked search of your lifers.</p>
     </section>
 
     <section id="explore-plate" class="plate" aria-labelledby="explore-title">
       <h2 id="explore-title">Explore</h2>
-      <p class="caption">Birds reported somewhere in the last 30 days that you haven't seen yet: what you could find there now.
-        Click any country on the map, then a state or province (and in some countries a county), or choose below.</p>
+      <p class="caption">What could you add to your list right now? Pick a place to see the birds reported there in the last
+        30 days that you haven't seen yet. Click a country on the map, then a state or province (and, in some countries, a county),
+        or use the menus below.</p>
       <div class="explore-where">
         <nav id="explore-trail" class="explore-trail" aria-label="Where you're exploring"></nav>
         <div id="explore-map" class="explore-map" role="img" aria-label="World map for choosing a place to explore. The place picker below does the same."></div>
@@ -201,16 +203,16 @@
         <button type="submit" class="button primary">Show new birds</button>
       </form>
       <div id="explore-result" class="explore-result" aria-live="polite"></div>
-      <p class="ai-note">Recent sightings: <a href="https://ebird.org">eBird</a> (Cornell Lab of Ornithology), fetched through Lyrebird and
-        remembered for an hour. Place names are left out where eBird marks them private.</p>
+      <p class="ai-note">Recent sightings come from <a href="https://ebird.org">eBird</a> (Cornell Lab of Ornithology), fetched through
+        Lyrebird and kept for an hour. Where eBird marks a place as private, its name is left out.</p>
     </section>
 
     <section id="unmatched-plate" class="plate" aria-labelledby="unmatched-title">
       <h2 id="unmatched-title">Names to check</h2>
-      <p class="caption">These eBird names don't match an AviList species yet, often because the two checklists
-        disagree about what counts as a species. They aren't counted above until you fix them.</p>
-      <p class="ai-note"><strong>Suggest a match</strong> first compares the name with AviList on your computer. If that isn't
-        conclusive, it asks an AI model (through Lyrebird) to choose from a shortlist, sending only the bird names involved.
+      <p class="caption">These eBird names don't match an AviList species yet, usually because the two checklists
+        disagree about what counts as a species. They're left out of your totals until you fix them.</p>
+      <p class="ai-note"><strong>Suggest a match</strong> first compares the name with AviList on your own computer. If that's not
+        enough to be sure, it asks an AI model (through Lyrebird) to choose from a shortlist, sending only the bird names involved.
         Nothing changes until you accept.</p>
       <ul id="unmatched" class="unmatched"></ul>
       <datalist id="avilist-names"></datalist>
@@ -232,7 +234,7 @@
   <footer class="colophon">
     <p id="citation"></p>
     <p>Bird sounds: <a href="https://xeno-canto.org">xeno-canto</a>, each recording by its recordist under the Creative Commons licence shown beside it.</p>
-    <p>Range maps: records from <a href="https://www.gbif.org">GBIF.org</a>, including eBird, shown by season.</p>
+    <p>Range maps: eBird records, by season, via <a href="https://www.gbif.org">GBIF.org</a> (other GBIF sources where eBird has none).</p>
     <p>Bird names in other languages: <a href="https://www.worldbirdnames.org/">IOC World Bird List</a> v15.2 (Gill, Donsker &amp; Rasmussen), CC BY 3.0, via huashu-bird-sticker.</p>
     <p id="stickers-credit">Bird illustrations: <a href="https://github.com/alchaincyf/huashu-bird-sticker">huashu-bird-sticker</a> by Huashu (<a href="https://birdalbum.com">Bird Album</a>), CC BY 4.0. They are AI-generated and may contain errors.</p>
     <p id="traits-credit" hidden>Size, range, habitat, diet and nest data: AVONET (<a href="https://doi.org/10.1111/ele.13898">Tobias et al. 2022</a>) and BIRDBASE (<a href="https://doi.org/10.1038/s41597-025-05615-3">Şekercioğlu et al. 2025</a>), both CC BY 4.0.</p>
