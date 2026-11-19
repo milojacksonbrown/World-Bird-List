@@ -90,6 +90,19 @@ h1 {
 /* ---------- plates (sections) ---------- */
 .source-label { text-align: center; color: var(--ink-soft); font-style: italic; margin: 8px 0 0; }
 
+/* Stickers of: your lifers / all birds (a sliding switch), and Shuffle */
+.sticker-controls { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 10px 0 0; font-size: 0.92rem; color: var(--ink-soft); }
+.sticker-controls[hidden] { display: none; }
+.mode-switch { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1px solid var(--rule); border-radius: 999px; background: var(--card); }
+.mode-switch::before { content: ''; position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 999px; background: var(--green); transition: transform 0.25s ease; }
+.mode-switch[data-mode="all"]::before { transform: translateX(100%); }
+.mode-switch button { position: relative; z-index: 1; padding: 4px 14px; border: 0; border-radius: 999px; background: none; font: inherit; color: var(--ink); white-space: nowrap; cursor: pointer; transition: color 0.25s ease; }
+.mode-switch button[aria-checked="true"] { color: var(--card); font-weight: 600; }
+.mode-switch button:focus-visible { outline: 2px solid var(--green-soft); outline-offset: 2px; }
+.button.shuffle { display: inline-flex; align-items: center; gap: 6px; }
+.button.shuffle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+@media (prefers-reduced-motion: reduce) { .mode-switch::before, .mode-switch button { transition: none; } }
+
 .plate {
   margin: 32px 0; padding: 24px 20px 28px;
   background: var(--card);

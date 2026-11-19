@@ -55,7 +55,7 @@ function setup({ geminiReply = [200, { choice: 1, reason: 'Hooded Crow is part o
 test('opening the web address shows it is running, without revealing the key', () => {
   const { run } = setup();
   const text = run('doGet')().text;
-  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-18 (explore, key fix)', actions: ['nameFix', 'query', 'recent'], usedToday: 0, dailyCap: 200 });
+  assert.deepEqual(JSON.parse(text), { ok: true, service: 'Lyrebird (Life List AI middleman)', version: '2026-11-19 (answers remembered)', actions: ['nameFix', 'query', 'recent'], usedToday: 0, dailyCap: 200 });
   assert.ok(!text.includes(KEY));
 });
 
@@ -165,6 +165,30 @@ test('query: sends only the question, with the query reply shape, and returns a 
   const sent = JSON.parse(calls[0].opts.payload);
   assert.match(sent.contents[0].parts[0].text, /Question: "Which families have I seen less than 10% of\?"/);
   assert.ok(sent.generationConfig.responseSchema.properties.table, 'asks for the query shape, not the name-fix shape');
+});
+
+test('query: the same question again that day comes from memory: no AI call, nothing counted', () => {
+  const { post, calls, store, today } = setup({ geminiReply: [200, { status: 'query', reason: 'Heaviest first', table: 'species',
+    filters: [], sortField: 'mass', sortDir: 'desc' }] });
+  const first = post(question("What's the heaviest bird I've seen?"));
+  assert.equal(first.status, 'query');
+  assert.equal(first.cached, undefined);
+  const again = post(question("  what's the HEAVIEST bird   I've seen?"));      // capitals and spacing don't matter
+  assert.equal(again.cached, true);
+  assert.deepEqual(again.query, first.query);
+  assert.equal(calls.length, 1);                       // the AI was asked once
+  assert.equal(store.get(today), '1');                 // and counted once
+  post(question("What's the lightest bird I've seen?"));   // a different question is asked afresh
+  assert.equal(calls.length, 2);
+});
+
+test('query: refusals are not remembered, and a new day asks again', () => {
+  const { post, calls, run } = setup({ geminiReply: [200, { status: 'cannot', reason: 'Not in the tables.' }] });
+  post(question('What did I see last weekend?'));
+  post(question('What did I see last weekend?'));
+  assert.equal(calls.length, 2);                       // "cannot" is asked again, in case it was a slip
+  assert.notEqual(run('queryCacheKey_("Owls", new Date("2026-11-19T12:00:00Z"))'), run('queryCacheKey_("Owls", new Date("2026-11-20T12:00:00Z"))'));
+  assert.notEqual(run('queryCacheKey_("Owls", new Date("2026-11-19T12:00:00Z"))'), run('queryCacheKey_("Owlz", new Date("2026-11-19T12:00:00Z"))'));
 });
 
 test('query: a query outside the allowed tables is not passed on', () => {

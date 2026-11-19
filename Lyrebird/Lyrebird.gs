@@ -34,7 +34,9 @@
  *      eBird requests for Explore (RECENT_CAP).
  *    - Gemini's answer is checked here (against the shortlist, or against the
  *      list of allowed tables and fields), and again by the website.
- *    - Nothing is stored except today's counts (and, for an hour, each place's eBird answer).
+ *    - Nothing is stored except today's counts, for an hour each place's eBird answer, and
+ *      for up to 6 hours (that day only) the checked search a question was turned into.
+ *      Only the question's wording and the search are kept: never anyone's data.
  *
  *  Models: Gemini 3 Flash first; if it's out of free quota or busy, the
  *  backup Gemma 4 model answers instead. Script Property AI_MODELS can set
@@ -45,7 +47,7 @@
 const LYREBIRD = {
   // Shown when the web address is opened, so you can tell which code is live.
   // Change it whenever you publish a new version.
-  VERSION: '2026-11-18 (explore, key fix)',
+  VERSION: '2026-11-19 (answers remembered)',
   DAILY_CAP: 200,          // Gemini calls per day, for everyone together
   MAX_TEXT: 120,           // longest name accepted, in characters
   MAX_SHORTLIST: 20,       // most candidates accepted
@@ -53,6 +55,7 @@ const LYREBIRD = {
   RECENT_CAP: 500,         // eBird requests per day for Explore, for everyone together
   RECENT_DAYS: 30,         // "recent" = reported in the last 30 days
   RECENT_CACHE_S: 3600,    // each place's answer is remembered for an hour
+  QUERY_CACHE_S: 21600,    // a question's checked answer is remembered for 6 hours (that day only)
 };
 
 /** Opening the web address in a browser shows that Lyrebird is running. */
@@ -90,6 +93,11 @@ function doPost(e) {
   if (req.problem) return json_({ ok: false, error: 'bad-request', message: req.problem });
   if (req.action === 'recent') return json_(recentSightings_(req.region));
 
+  // A question asked already today (the example questions, say): the same checked search,
+  // straight from memory, without asking the AI again or using up the daily allowance
+  const remembered = req.action === 'query' ? rememberedQuery_(req.question, new Date()) : null;
+  if (remembered) return json_(remembered);
+
   const props = PropertiesService.getScriptProperties();
   const key = props.getProperty('GEMINI_API_KEY') || '';
   if (!key && !props.getProperty('GROQ_API_KEY')) return json_({ ok: false, error: 'not-configured', message: 'The AI is not set up yet.' });
@@ -103,9 +111,10 @@ function doPost(e) {
     if (req.action === 'query') {
       const ai = askAi_(buildQueryPrompt_(req.question, new Date()), key, queryResponseSchema_());
       const ans = readQueryAnswer_(ai.text);
-      return json_(ans.status === 'query'
-        ? { ok: true, status: 'query', query: ans.query, reason: ans.reason, model: ai.model, backup: ai.backup }
-        : { ok: true, status: ans.status, reason: ans.reason, model: ai.model, backup: ai.backup });
+      if (ans.status !== 'query') return json_({ ok: true, status: ans.status, reason: ans.reason, model: ai.model, backup: ai.backup });
+      const reply = { ok: true, status: 'query', query: ans.query, reason: ans.reason, model: ai.model, backup: ai.backup };
+      rememberQuery_(req.question, new Date(), reply);
+      return json_(reply);
     }
     // nameFix
     const ai = askAi_(buildAiPrompt_(req.ebird, req.shortlist), key);
@@ -194,6 +203,34 @@ function recentSightings_(region) {
 }
 
 /** Today's date as the key for the daily count, e.g. "2026-11-11" (UTC). */
+/**
+ * Where a question's answer is remembered: the question as typed, ignoring capitals and spacing,
+ * on that day (the AI is told today's date, for questions like "this year"). Two different hashes
+ * of the wording together, so two questions sharing one is never a worry.
+ */
+function queryCacheKey_(question, date) {
+  const text = String(question).toLowerCase().replace(/\s+/g, ' ').trim();
+  let a = 2166136261, b = 5381;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    a = Math.imul(a ^ c, 16777619) >>> 0;
+    b = (Math.imul(b, 33) + c) >>> 0;
+  }
+  return 'ask:' + dayKey_(date) + ':' + a.toString(36) + b.toString(36) + ':' + text.length;
+}
+
+/** A checked answer to this question from earlier today, marked as remembered; null if none. */
+function rememberedQuery_(question, date) {
+  const hit = CacheService.getScriptCache().get(queryCacheKey_(question, date));
+  if (!hit) return null;
+  try { return Object.assign(JSON.parse(hit), { cached: true }); } catch (e) { return null; }
+}
+
+/** Remembers a checked answer (only a good one: a refusal or failure is asked again next time). */
+function rememberQuery_(question, date, reply) {
+  try { CacheService.getScriptCache().put(queryCacheKey_(question, date), JSON.stringify(reply), LYREBIRD.QUERY_CACHE_S); } catch (e) { /* too big to remember: fine */ }
+}
+
 function dayKey_(date) {
   return date.toISOString().slice(0, 10);
 }

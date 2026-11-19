@@ -96,6 +96,7 @@
     renderCharts(d);
     renderMap(d);
     redrawTrail();                             // the page is taller now: redraw the decorative route
+    warmUp();                                  // fetch what fact files and questions need, in the background
     if (!keepPlace) $('#dashboard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -180,9 +181,9 @@
   });
 
   // ---------- Bird sounds: recordings from xeno-canto, streamed from there when played ----------
-  let soundsLoading = null;
+  let soundsLoading = null, soundsData = null;           // soundsData: set once loaded
   const loadSounds = () => (soundsLoading = soundsLoading || fetch('data/sounds.json')
-    .then(r => (r.ok ? r.json() : null)).then(j => (j && j.species) || {}).catch(() => ({})));
+    .then(r => (r.ok ? r.json() : null)).then(j => (soundsData = (j && j.species) || {})).catch(() => (soundsData = {})));
   /** A player for one recording, with its credit (required by its licence). */
   const soundPlayer = r => {
     const s = soundInfo_(r);
@@ -230,9 +231,9 @@
   $('#names-lang').addEventListener('change', e => setNamesLang(e.target.value));
 
   // ---------- Fact files: click a bird for everything known about it ----------
-  let rangesLoading = null;
+  let rangesLoading = null, rangesData = null;           // rangesData: set once loaded
   const loadRanges = () => (rangesLoading = rangesLoading || fetch('data/ranges.json')
-    .then(r => r.ok ? r.json() : null).then(j => (j && j.ranges) || {}).catch(() => ({})));
+    .then(r => r.ok ? r.json() : null).then(j => (rangesData = (j && j.ranges) || {})).catch(() => (rangesData = {})));
   let factOpener = null;                 // the button that opened it, to return focus there
 
   async function openFactFile(sci, opener) {
@@ -242,14 +243,49 @@
     const dlg = $('#factfile');
     $('#factfile-body').innerHTML = '<p class="working">Opening the fact file…</p>';
     if (!dlg.open) dlg.showModal();
-    const [data, ranges, sounds, other] = await Promise.all([askTables(), loadRanges(), loadSounds(), loadOtherNames()]);
+    // The sizes and facts are needed to draw it; AviList's range text (1.9 MB) and the sounds (4 MB)
+    // are slotted in when they arrive, so the fact file never waits for them. (They're usually
+    // here already: warmUp fetches them while the visitor looks at the dashboard.)
+    const [data, other] = await Promise.all([askTables(), loadOtherNames()]);
     const row = data.species.find(r => r.scientific === sp.sci);
     const lifer = current.d.lifers.find(l => l.sci === sp.sci);
-    const f = factFile_(sp, row, { lifer, range: ranges[sp.sci] || '', stickers });
-    $('#factfile-body').innerHTML = factFileHtml(f, row, sounds[sp.sci] || [], other.splitFrom[sp.sci]);
+    const f = factFile_(sp, row, { lifer, range: (rangesData && rangesData[sp.sci]) || '', stickers });
+    $('#factfile-body').innerHTML = factFileHtml(f, row, (soundsData && soundsData[sp.sci]) || [], other.splitFrom[sp.sci]);
+    $('#factfile-body').dataset.sci = sp.sci;
     fitFactFileBird(f, row);
     const st = current.d.stats && current.d.stats.species && current.d.stats.species[sp.i];
     drawRangeMap(sp, st && st.points ? [...st.points.values()] : []);
+    const stillOpen = () => dlg.open && $('#factfile-body').dataset.sci === sp.sci;
+    if (!rangesData) loadRanges().then(ranges => {
+      const text = factFile_(sp, row, { lifer, range: ranges[sp.sci] || '', stickers }).range;
+      if (stillOpen() && $('#ff-range-slot')) $('#ff-range-slot').innerHTML = rangeBlock(text);
+    });
+    if (!soundsData) loadSounds().then(sounds => {
+      if (stillOpen() && $('#ff-sounds-slot')) $('#ff-sounds-slot').innerHTML = soundsBlock(sounds[sp.sci] || []);
+    });
+  }
+
+  /** The fact file's "Where it lives" (AviList's range text) and "Sounds" sections. */
+  const rangeBlock = text => (text ? '<section class="ff-block ff-range"><h3>Where it lives</h3><p>' + esc(text) + ' <span class="src">AviList</span></p></section>' : '');
+  const soundsBlock = recs => (recs.length ? '<section class="ff-block ff-sounds"><h3>Sounds</h3><div class="sounds">' + recs.map(soundPlayer).join('') + '</div>' +
+    '<p class="ff-credit">Recordings from <a href="https://xeno-canto.org">xeno-canto</a>, shared by their recordists.</p></section>' : '');
+
+  // ---------- Getting ready for what's likely next ----------
+  // Once the dashboard has drawn, while the visitor looks at it: fetch what fact files and
+  // questions need (about 1 MB, compressed), build the question tables, and wake Lyrebird.
+  // Apps Script takes a few seconds to answer its first request after a quiet spell; a plain
+  // visit to its address (no AI, nothing counted) gets that wait over before anyone asks.
+  let warmedUp = false;
+  function warmUp() {
+    if (warmedUp) return;
+    warmedUp = true;
+    const later = window.requestIdleCallback ? f => requestIdleCallback(f, { timeout: 4000 }) : f => setTimeout(f, 2000);
+    later(() => {
+      if (LYREBIRD_URL) fetch(LYREBIRD_URL, { mode: 'no-cors' }).catch(() => {});
+      askTables().catch(() => {});
+      loadOtherNames(); loadRanges(); loadSounds();
+      loadWorld().catch(() => {});
+    });
   }
 
   // ---------- The range map: GBIF records by season, drawn in the page's own colours ----------
@@ -296,7 +332,28 @@
     }));
     return tiles.flat();
   }
+  // Range maps already drawn are remembered in this browser for a month (the 40 most recent),
+  // so opening the same bird again needs no GBIF requests. Only the grid squares are kept.
+  const RANGE_STORE = 'lifelist.rangeMaps.v1', RANGE_KEEP = 40, RANGE_DAYS = 30;
+  const rangeStore = () => { try { return JSON.parse(localStorage.getItem(RANGE_STORE) || '{}'); } catch (e) { return {}; } };
+  function savedRange(sci) {
+    const r = rangeStore()[sci];
+    if (!r || Date.now() - r.t > RANGE_DAYS * 864e5) return null;
+    const cells = r.cells.map(([hash, season, total]) => ({ hash, box: geohashBox_(hash), season, total })).filter(c => c.box);
+    return { cells, key: r.key, ebird: r.ebird, as: r.as };
+  }
+  function saveRange(sci, range) {
+    if (!range.key) return;                                  // not found on GBIF: ask again next time
+    try {
+      const all = rangeStore();
+      all[sci] = { t: Date.now(), key: range.key, ebird: range.ebird, as: range.as, cells: range.cells.map(c => [c.hash, c.season, c.total]) };
+      const keep = Object.keys(all).sort((a, b) => all[b].t - all[a].t).slice(0, RANGE_KEEP);
+      localStorage.setItem(RANGE_STORE, JSON.stringify(Object.fromEntries(keep.map(k => [k, all[k]]))));
+    } catch (e) { /* storage full or blocked: the map is just fetched again next time */ }
+  }
   function loadRange(sci) {
+    const saved = !rangeCache.has(sci) && savedRange(sci);
+    if (saved) rangeCache.set(sci, Promise.resolve(saved));
     if (!rangeCache.has(sci)) {
       const p = gbifKey(sci).then(async ({ key, as }) => {
         if (!key) return { cells: [], key: null };
@@ -305,7 +362,7 @@
         if (!june.length && !december.length) { [june, december] = await seasons(null); ebird = false; }
         return { cells: seasonCells_(june, december), key, ebird, as };
       });
-      p.catch(() => rangeCache.delete(sci));              // try again next time
+      p.then(r => saveRange(sci, r), () => rangeCache.delete(sci));   // remembered; or, if it failed, tried again next time
       rangeCache.set(sci, p);
     }
     return rangeCache.get(sci);
@@ -464,14 +521,13 @@
           (f.tags.length ? '<p class="ff-tags">' + f.tags.map(t => '<span class="tag">' + esc(t) + '</span>').join('') + '</p>' : '') +
           (regions ? '<p class="ff-regions"><strong>Regions:</strong> ' + esc(regions) + '</p>' : '') +
         '</div></div>' +
-      (f.range ? '<section class="ff-block ff-range"><h3>Where it lives</h3><p>' + esc(f.range) + ' <span class="src">AviList</span></p></section>' : '') +
+      '<div id="ff-range-slot">' + rangeBlock(f.range) + '</div>' +
       '<section class="ff-block"><h3>Range map</h3><div id="ff-map" class="ff-map"><p class="working">Loading the map…</p></div>' +
         '<ul class="ff-legend"><li><span class="sw june"></span>Recorded in June–July</li><li><span class="sw december"></span>December–January</li>' +
         '<li><span class="sw both"></span>Year-round</li>' + (f.seen ? '<li><span class="sw mine"></span>Your sightings</li>' : '') + '</ul>' +
         '<p id="ff-map-credit" class="ff-credit"></p></section>' +
       '<div class="ff-grid"><div>' + list('Size', f.size) + splitSizeNote(f, splitFrom) + sizeComparison(f, row) + '</div>' + list('Life', f.life) + '</div>' +
-      ((recordings || []).length ? '<section class="ff-block ff-sounds"><h3>Sounds</h3><div class="sounds">' + recordings.map(soundPlayer).join('') + '</div>' +
-        '<p class="ff-credit">Recordings from <a href="https://xeno-canto.org">xeno-canto</a>, shared by their recordists.</p></section>' : '') +
+      '<div id="ff-sounds-slot">' + soundsBlock(recordings || []) + '</div>' +
       records +
       (f.links.length ? '<p class="ff-links">More: ' + f.links.map(l => '<a href="' + esc(l.url) + '">' + esc(l.label) + '</a>').join(' · ') + '</p>' : '');
   }
@@ -1604,11 +1660,17 @@
   }
   function drawScatter() {
     const box = $('#lifer-scatter');
-    if (!current || !stickers || $('#dashboard').hidden) { box.innerHTML = ''; scatterKey = ''; return; }
-    if (!scatterPick || scatterPick.text !== current.text) {         // a new file (not just a name fix): pick again
-      const pool = current.d.lifers.filter(l => stickerFor_(checklist.species[l.i], stickers));
+    if (!current || !stickers || $('#dashboard').hidden) { box.innerHTML = ''; scatterKey = ''; $('#sticker-controls').hidden = true; return; }
+    // The switch and Shuffle only where there's room for stickers (set first: it changes the title card's height)
+    const roomy = Math.min($('main').getBoundingClientRect().left + 16, document.documentElement.clientWidth - $('main').getBoundingClientRect().right + 16) - 20 >= 70;
+    if ($('#sticker-controls').hidden === roomy) $('#sticker-controls').hidden = !roomy;
+    // A new file, the other kind of bird, or Shuffle: pick again (a name fix keeps them)
+    if (!scatterPick || scatterPick.text !== current.text || scatterPick.mode !== stickerMode) {
+      const pool = stickerMode === 'all'
+        ? checklist.species.filter(sp => !sp.extinct && stickerFor_(sp, stickers))       // any living bird with a sticker
+        : current.d.lifers.filter(l => stickerFor_(checklist.species[l.i], stickers));
       for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }   // shuffle
-      scatterPick = { text: current.text, birds: pool.slice(0, SCATTER_ALL) };
+      scatterPick = { text: current.text, mode: stickerMode, birds: pool.slice(0, SCATTER_ALL) };
       scatterKey = '';                                           // new birds: let them pop in
     }
     const birds = scatterPick.birds;
@@ -1705,10 +1767,11 @@
 
   // A hint that the stickers can be clicked: "click me" and a dotted arrow pointing at the
   // leftmost sticker by the title (where eyes usually land first). The label goes on whichever
-  // side of the bird is clear of text, other stickers and the dotted route. Shown until a sticker
-  // is first clicked, then never again (in this browser).
+  // side of the bird is clear of text, other stickers and the dotted route. Shown on each visit
+  // until a sticker is clicked (it used to be hidden for good after the first click, which made
+  // it look as if it had stopped working).
   const HINT_KEY = 'lifelist.stickerClicked';
-  const hintDone = () => { try { return localStorage.getItem(HINT_KEY) === '1'; } catch (e) { return false; } };
+  const hintDone = () => { try { return sessionStorage.getItem(HINT_KEY) === '1'; } catch (e) { return false; } };
   function stickerHint(placed, routePts, clear, width) {
     if (!placed.length || hintDone()) return '';
     const p = placed.reduce((a, b) => (b.x < a.x ? b : a));
@@ -1742,9 +1805,39 @@
   }
   $('#lifer-scatter').addEventListener('click', e => {
     if (!e.target.closest('.scatter-sticker')) return;
-    try { localStorage.setItem(HINT_KEY, '1'); } catch (err) { /* storage blocked: it just shows again next time */ }
+    try { sessionStorage.setItem(HINT_KEY, '1'); } catch (err) { /* storage blocked: it just shows again next time */ }
     document.querySelectorAll('#lifer-scatter .sticker-hint, #lifer-scatter .sticker-hint-arrow').forEach(h => h.remove());
   });
+  // Stickers of: your lifers or all birds (remembered in this browser), and Shuffle
+  const STICKER_MODE_KEY = 'lifelist.stickerMode';
+  let stickerMode = 'lifers';
+  try { if (localStorage.getItem(STICKER_MODE_KEY) === 'all') stickerMode = 'all'; } catch (e) { /* not remembered */ }
+  function showStickerMode() {
+    $('.mode-switch').dataset.mode = stickerMode;
+    $('.mode-switch').querySelectorAll('button').forEach(b => {
+      b.setAttribute('aria-checked', String(b.dataset.mode === stickerMode));
+      b.tabIndex = b.dataset.mode === stickerMode ? 0 : -1;        // one tab stop; arrow keys switch
+    });
+  }
+  function setStickerMode(mode) {
+    stickerMode = mode;
+    try { localStorage.setItem(STICKER_MODE_KEY, mode); } catch (e) { /* not remembered */ }
+    showStickerMode();
+    drawScatter();                                               // a different kind of bird: picks again
+  }
+  showStickerMode();
+  $('.mode-switch').addEventListener('click', e => {
+    const b = e.target.closest('button[data-mode]');
+    if (b && b.dataset.mode !== stickerMode) setStickerMode(b.dataset.mode);
+  });
+  $('.mode-switch').addEventListener('keydown', e => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    e.preventDefault();
+    setStickerMode(stickerMode === 'all' ? 'lifers' : 'all');
+    $('.mode-switch [data-mode="' + stickerMode + '"]').focus();
+  });
+  $('#sticker-shuffle').addEventListener('click', () => { scatterPick = null; drawScatter(); });
+
   addEventListener('resize', redrawTrail);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(redrawTrail);
   // …and whenever the page's height changes for any other reason (text appearing or
